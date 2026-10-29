@@ -1,0 +1,33 @@
+{
+  "name": "@chojema/desktop",
+  "productName": "Chojema Docs",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "license": "Apache-2.0",
+  "author": "Chojema",
+  "description": "Chojema Docs — HWP and HWPX desktop word processor",
+  "homepage": "https://github.com/chojema/ChojemaDocs",
+  "main": "out/main/index.js",
+  "scripts": {
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "@genoffice/hwp": "*",
+    "@genoffice/electron-utils": "*",
+    "@genoffice/i18n": "*",
+    "@genoffice/ai-provider": "*",
+    "@genoffice/ui": "*",
+    "electron": "^43.7.6",
+    "electron-builder": "^26.0.12",
+    "electron-updater": "^6.8.9",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.11",
+    "@types/node": "^24.10.1"
+  }
+}

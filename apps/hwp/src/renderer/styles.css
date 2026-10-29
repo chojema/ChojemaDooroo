@@ -1,0 +1,266 @@
+/* The editor itself is the rhwp studio inside the iframe and carries its own
+   chrome. These rules only cover the host around it: the layout beside the AI
+   panel (ai-panel.css), the loading cover and the save / error notice. */
+:root {
+  --accent: #2b6cb0;
+  --accent-dark: #245a93;
+  --accent-soft: #e6eff8;
+  /* AI panel states the shared tokens have no value for */
+  --hwp-focus-ring: rgb(35 36 37 / 20%);
+  --hwp-focus-ring-blue: rgb(74 141 246 / 30%);
+  --hwp-error: #c62828;
+  --hwp-error-border: rgb(198 40 40 / 45%);
+  --hwp-error-bg: rgb(198 40 40 / 8%);
+  --hwp-shadow-soft: rgb(0 0 0 / 9%);
+  --hwp-shimmer-base: #666666;
+  --hwp-shimmer-hi: #d9d9d9;
+  --hwp-knob-dot: #ffffff;
+}
+
+[data-theme='dark'] {
+  --accent: #63a4e6;
+  --accent-dark: #4f92d6;
+  --accent-soft: #1e3550;
+  --hwp-focus-ring: rgb(228 228 228 / 25%);
+  --hwp-focus-ring-blue: rgb(74 158 255 / 40%);
+  --hwp-error: #f28b82;
+  --hwp-error-border: rgb(242 139 130 / 45%);
+  --hwp-error-bg: rgb(242 139 130 / 12%);
+  --hwp-shadow-soft: rgb(0 0 0 / 45%);
+  --hwp-shimmer-base: #8a8a8a;
+  --hwp-shimmer-hi: #d0d0d0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --accent: #63a4e6;
+    --accent-dark: #4f92d6;
+    --accent-soft: #1e3550;
+    --hwp-focus-ring: rgb(228 228 228 / 25%);
+    --hwp-focus-ring-blue: rgb(74 158 255 / 40%);
+    --hwp-error: #f28b82;
+    --hwp-error-border: rgb(242 139 130 / 45%);
+    --hwp-error-bg: rgb(242 139 130 / 12%);
+    --hwp-shadow-soft: rgb(0 0 0 / 45%);
+    --hwp-shimmer-base: #8a8a8a;
+    --hwp-shimmer-hi: #d0d0d0;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--gs-font-sans);
+  font-size: var(--text-small);
+  overflow: hidden;
+}
+
+.hwp-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Ctrl+F5 presentation: the editor's own chrome is hidden through its chrome API;
+   here the AI dock, the memo column and notices leave the stage to the document. */
+.hwp-app.hwp-presenting .ai-dock,
+.hwp-app.hwp-presenting .memo-side,
+.hwp-app.hwp-presenting .hwp-topbar,
+.hwp-app.hwp-presenting .hwp-notice {
+  display: none !important;
+}
+
+/* the editor has no ribbon: this thin row is the host's own chrome */
+.hwp-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 30px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--chrome-bg);
+}
+
+/* the memo column's button, at the start of the row; the autosave toggle keeps the end */
+.memo-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin-inline-end: auto;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-6);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.memo-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.memo-toggle.on {
+  border-color: var(--border-strong);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.memo-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.autosave-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.autosave-toggle input {
+  display: none;
+}
+
+.autosave-knob {
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--border-strong);
+  position: relative;
+  transition: background 0.15s;
+}
+
+.autosave-knob::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--hwp-knob-dot);
+  transition: left 0.15s;
+}
+
+.autosave-toggle.on .autosave-knob {
+  background: var(--accent);
+}
+
+.autosave-toggle.on .autosave-knob::after {
+  left: 14px;
+}
+
+.autosave-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* body row: the AI dock, the memo column and the editor */
+.app-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.hwp-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.hwp-editor-host {
+  position: absolute;
+  inset: 0;
+}
+
+.hwp-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.hwp-notice {
+  position: absolute;
+  /* above the memo editor's backdrop: a save or close held back says why there */
+  z-index: 1300;
+  /* clear of the editor's menus above and its status bar below */
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(720px, calc(100% - 32px));
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-menu);
+}
+
+.hwp-notice-info {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+}
+
+.hwp-notice-error {
+  border-color: var(--danger-border);
+  background: var(--danger-bg);
+}
+
+.hwp-notice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.hwp-notice-detail {
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+
+.hwp-notice-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hwp-notice-close:hover {
+  background: var(--hover);
+}
+
+.hwp-notice-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

@@ -1,0 +1,42 @@
+{
+  "name": "chojema-docs",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "description": "Chojema Docs — HWP and HWPX desktop word processor",
+  "license": "Apache-2.0",
+  "author": "Chojema",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chojema/ChojemaDocs.git"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build && electron apps/desktop",
+    "start": "electron apps/desktop",
+    "build": "npm run build -w @genoffice/hwp && npm run build -w @chojema/desktop",
+    "typecheck": "npm run typecheck -w @chojema/desktop && npm run typecheck -w @genoffice/hwp",
+    "test": "npm run test -w @chojema/desktop && node tools/test.mjs",
+    "test:desktop": "npm run test -w @chojema/desktop",
+    "notices": "node tools/notices.mjs",
+    "dist:win": "npm run build && npm run notices && npm run dist:win -w @chojema/desktop -- --publish never",
+    "dist:mac": "npm run build && npm run notices && npm run dist:mac -w @chojema/desktop -- --publish never",
+    "version:set": "node tools/version.mjs",
+    "check:public": "node tools/check-public.mjs",
+    "test:smoke": "node tools/smoke-hwp.mjs"
+  },
+  "overrides": {
+    "nanoid@3": "^3.3.17",
+    "nanoid@5": "^5.1.16",
+    "katex": "^0.18.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

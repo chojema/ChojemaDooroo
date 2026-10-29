@@ -1,0 +1,76 @@
+/**
+ * Batches of blocks for one model call each (spec §8: about 2,500 tokens).
+ *
+ * The token count is an estimate, not a tokenizer: tokenizers differ by
+ * provider and model, and the batch size only has to be roughly right.
+ *   - Han, kana and Hangul: one token per character (CJK text tokenizes at
+ *     about one character per token, often worse)
+ *   - other non-ASCII characters (accented Latin, Cyrillic, Thai, …): one
+ *     token per two characters
+ *   - ASCII: one token per four characters (the usual rate for English)
+ * Blocks are measured as they are sent (placeholder text) plus a fixed
+ * overhead for the JSON wrapping each block in the request.
+ */
+import type { TranslationJobItem, TranslationSourceBlock } from '../jobs/translate'
+import type { InlineRun } from '../tree/types'
+import { encodeRuns } from './placeholders'
+
+/** source tokens per batch (spec §8: about 2,500, tunable) */
+export const TRANSLATION_BATCH_TOKENS = 2_500
+/** tokens of JSON around one block in the request (id, keys, quotes) */
+export const BLOCK_OVERHEAD_TOKENS = 8
+
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+/** rough token count of a text (see the rates above), rounded up */
+export function estimateTokens(text: string): number {
+  let cjk = 0
+  let other = 0
+  let ascii = 0
+  for (const ch of text) {
+    if (ch.charCodeAt(0) < 0x80) ascii++
+    else if (CJK.test(ch)) cjk++
+    else other++
+  }
+  return Math.ceil(cjk + other / 2 + ascii / 4)
+}
+
+/** tokens one block adds to a batch */
+export function blockTokens(runs: readonly InlineRun[]): number {
+  return estimateTokens(encodeRuns(runs).text) + BLOCK_OVERHEAD_TOKENS
+}
+
+export interface BatchOptions {
+  /** token budget of one batch; default TRANSLATION_BATCH_TOKENS */
+  maxTokens?: number
+}
+
+/**
+ * Cut blocks into batches in reading order. A batch closes before the block
+ * that would take it over the budget; a block over the budget on its own
+ * goes alone. This is the `batch` function the translation job expects.
+ */
+export function batchTranslationItems<B extends TranslationSourceBlock>(
+  items: readonly TranslationJobItem<B>[],
+  options: BatchOptions = {},
+): TranslationJobItem<B>[][] {
+  const max = options.maxTokens ?? TRANSLATION_BATCH_TOKENS
+  if (!Number.isFinite(max) || max <= 0) {
+    throw new RangeError(`translation batch: invalid token budget ${max}`)
+  }
+  const batches: TranslationJobItem<B>[][] = []
+  let current: TranslationJobItem<B>[] = []
+  let used = 0
+  for (const item of items) {
+    const tokens = blockTokens(item.block.runs)
+    if (current.length > 0 && used + tokens > max) {
+      batches.push(current)
+      current = []
+      used = 0
+    }
+    current.push(item)
+    used += tokens
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
