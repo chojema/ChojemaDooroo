@@ -56,6 +56,8 @@ export const HWP_CHANNELS = {
   // channels below are served once by the shell for every editor
   getLanguage: 'app:get-language',
   languageChanged: 'app:language-changed',
+  getTerminology: 'app:get-terminology',
+  terminologyChanged: 'app:terminology-changed',
   getTheme: 'app:get-theme',
   themeChanged: 'app:theme-changed',
   /** the shell's stored author name (settings, else the PC account); `{ value, fallback }` */
@@ -389,6 +391,8 @@ export interface HwpApi {
   openDroppedDocuments(files: File[]): boolean
   getLanguage(): Promise<Lang>
   onLanguageChanged(handler: (lang: Lang) => void): () => void
+  getTerminology(): Promise<'word' | 'hwp'>
+  onTerminologyChanged(handler: (style: 'word' | 'hwp') => void): () => void
   getTheme(): Promise<UiTheme>
   onThemeChanged(handler: (theme: UiTheme) => void): () => void
   /** The shell-wide AutoSave default; a per-window override is kept in localStorage */

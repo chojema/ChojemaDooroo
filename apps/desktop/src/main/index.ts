@@ -31,15 +31,17 @@ installNavigationGuard(app)
 installContextMenu(app, () => contextMenuLabels(getUiLang()))
 
 interface Settings {
+  terminology: 'word' | 'hwp'
   theme: 'system' | 'light' | 'dark'
   recent: string[]
   aiPrefs: typeof DEFAULT_AI_PANEL_PREFS
 }
 const settingsPath = join(app.getPath('userData'), 'chojema-settings.json')
-let settings: Settings = { theme: 'system', recent: [], aiPrefs: { ...DEFAULT_AI_PANEL_PREFS, openInNewDocs: false } }
+let settings: Settings = { terminology: 'word', theme: 'system', recent: [], aiPrefs: { ...DEFAULT_AI_PANEL_PREFS, openInNewDocs: false } }
 try {
   const saved = JSON.parse(readFileSync(settingsPath, 'utf8'))
   settings = {
+    terminology: saved.terminology === 'hwp' ? 'hwp' : 'word',
     theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
     recent: Array.isArray(saved.recent) ? saved.recent.filter((p: unknown) => typeof p === 'string' && editorForPath(p)).slice(0, 15) : [],
     aiPrefs: normalizeAiPanelPrefs(saved.aiPrefs ?? settings.aiPrefs),
@@ -99,7 +101,7 @@ function publish(host: Host) {
   const state: AppState = {
     tabs: host.tabs.map(({ id, kind, title, path }) => ({ id, kind, title, path, active: host.active === id, secondary: host.secondary === id })),
     recent: settings.recent.filter(existsSync), version: app.getVersion(), theme: settings.theme,
-    update: updateMessage, page: host.page,
+    terminology: settings.terminology, update: updateMessage, page: host.page,
   }
   host.win.webContents.send(STATE_CHANNEL, state)
   return state
@@ -296,6 +298,11 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
       case 'close': if (typeof value === 'string') await closeTab(host, value); break
       case 'home': showPage(host, 'home'); break
       case 'settings': showPage(host, 'settings'); break
+      case 'terminology':
+        if (value !== 'word' && value !== 'hwp') throw new Error('Invalid terminology')
+        settings.terminology = value; persist()
+        for (const wc of webContents.getAllWebContents()) wc.send('app:terminology-changed', value)
+        publishAll(); break
       case 'theme':
         if (value !== 'light' && value !== 'dark' && value !== 'system') throw new Error('Invalid theme')
         settings.theme = value; nativeTheme.themeSource = value; persist()
@@ -322,6 +329,7 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
 function registerSharedIpc() {
   const handlers: Record<string, () => unknown> = {
     'app:get-language': () => getUiLang(),
+    'app:get-terminology': () => settings.terminology,
     'app:get-theme': () => settings.theme,
     'app:get-document-theme': () => 'follow',
     'app:get-auto-save-default': () => 'off',

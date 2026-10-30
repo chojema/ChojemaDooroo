@@ -30,7 +30,7 @@ module.exports = {
   ],
   win: { target: [{ target: 'nsis', arch: ['x64'] }], icon: 'build/icon.ico', signAndEditExecutable: true },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, deleteAppDataOnUninstall: false, artifactName: 'ChojemaDooroo-Setup-${version}-${arch}.${ext}' },
-  mac: { target: ['dmg', 'zip'], category: 'public.app-category.productivity', identity: null },
+  mac: { icon: 'build/icon.icns', target: ['dmg', 'zip'], category: 'public.app-category.productivity', identity: '-' },
   dmg: { sign: false },
   publish: [{ provider: 'github', owner: 'chojema', repo: 'ChojemaDooroo', releaseType: require('./package.json').version.includes('-') ? 'prerelease' : 'release' }],
   beforePack: () => {

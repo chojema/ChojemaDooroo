@@ -89,6 +89,8 @@ beforeEach(() => {
       setMemoModalOpen: vi.fn(),
       getAuthorName: async () => ({ value: 'Mina', fallback: 'pc-account' }),
       onLanguageChanged: () => () => undefined,
+      getTerminology: async () => 'word' as const,
+      onTerminologyChanged: () => () => undefined,
     } as unknown as HwpApi,
   })
 })

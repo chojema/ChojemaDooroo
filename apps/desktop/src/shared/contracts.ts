@@ -12,6 +12,7 @@ export interface AppState {
   recent: string[]
   version: string
   theme: 'light' | 'dark' | 'system'
+  terminology: 'word' | 'hwp'
   update: string
   page: 'home' | 'settings' | 'editor'
 }

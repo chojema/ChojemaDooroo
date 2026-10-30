@@ -418,6 +418,8 @@ function panelApi(): { api: HwpApi; setMemoModalOpen: ReturnType<typeof vi.fn> }
       setMemoModalOpen,
       getAuthorName: async () => ({ value: 'Mina', fallback: 'pc-account' }),
       onLanguageChanged: () => () => undefined,
+      getTerminology: async () => 'word' as const,
+      onTerminologyChanged: () => () => undefined,
     } as unknown as HwpApi,
   }
 }

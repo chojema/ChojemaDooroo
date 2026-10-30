@@ -190,6 +190,12 @@ const api: HwpApi = {
     ipcRenderer.on(HWP_CHANNELS.languageChanged, listener)
     return () => ipcRenderer.removeListener(HWP_CHANNELS.languageChanged, listener)
   },
+  getTerminology: () => ipcRenderer.invoke(HWP_CHANNELS.getTerminology),
+  onTerminologyChanged: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, style: 'word' | 'hwp') => handler(style)
+    ipcRenderer.on(HWP_CHANNELS.terminologyChanged, listener)
+    return () => ipcRenderer.removeListener(HWP_CHANNELS.terminologyChanged, listener)
+  },
   getTheme: () => ipcRenderer.invoke(HWP_CHANNELS.getTheme),
   onThemeChanged: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, theme: UiTheme) => handler(theme)

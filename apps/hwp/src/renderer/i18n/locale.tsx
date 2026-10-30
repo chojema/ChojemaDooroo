@@ -2,8 +2,14 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createI18n, htmlDir, htmlLang, type Lang, type Params } from '@genoffice/i18n'
 import { strings } from './strings'
+import { wordTerminology, type TerminologyStyle } from '../terminology'
 
 const translate = createI18n(strings)
+// Transform templates before interpolating file names, quoted document text or AI output.
+const translateWord = createI18n({
+  ...strings,
+  ko: Object.fromEntries(Object.entries(strings.ko).map(([key, value]) => [key, wordTerminology(value)])) as typeof strings.ko,
+})
 
 export type StringKey = keyof typeof strings.zh
 export type TFunc = (key: StringKey, params?: Params) => string
@@ -37,18 +43,33 @@ export function aiLangDirective(lang: Lang): string {
   return AI_LANG_DIRECTIVES[lang]
 }
 
-const LocaleContext = createContext<Lang>('zh')
+const LocaleContext = createContext<{ lang: Lang; terminology: TerminologyStyle }>({ lang: 'zh', terminology: 'word' })
 
 /** Module-level current language: for code outliving render closures, kept in sync with the Provider */
 let moduleLang: Lang = 'zh'
+let moduleTerminology: TerminologyStyle = 'word'
 
 export function t(key: StringKey, params?: Params): string {
-  return translate(moduleLang, key, params)
+  return (moduleTerminology === 'word' ? translateWord : translate)(moduleLang, key, params)
 }
 
 export function LocaleProvider({ initial, children }: { initial: Lang; children: ReactNode }) {
   const [lang, setLang] = useState<Lang>(initial)
+  const [terminology, setTerminology] = useState<TerminologyStyle>('word')
   moduleLang = lang
+  moduleTerminology = terminology
+  useEffect(() => {
+    let disposed = false
+    let changed = false
+    const stop = window.hwpApi.onTerminologyChanged((next) => {
+      changed = true
+      setTerminology(next)
+    })
+    void window.hwpApi.getTerminology().then((next) => {
+      if (!disposed && !changed) setTerminology(next)
+    }).catch(() => {})
+    return () => { disposed = true; stop() }
+  }, [])
   useEffect(
     () =>
       window.hwpApi.onLanguageChanged((next) => {
@@ -58,10 +79,10 @@ export function LocaleProvider({ initial, children }: { initial: Lang; children:
       }),
     [],
   )
-  return <LocaleContext.Provider value={lang}>{children}</LocaleContext.Provider>
+  return <LocaleContext.Provider value={{ lang, terminology }}>{children}</LocaleContext.Provider>
 }
 
 export function useI18n(): { lang: Lang; t: TFunc } {
-  const lang = useContext(LocaleContext)
-  return { lang, t: (key, params) => translate(lang, key, params) }
+  const { lang, terminology } = useContext(LocaleContext)
+  return { lang, t: (key, params) => (terminology === 'word' ? translateWord : translate)(lang, key, params) }
 }

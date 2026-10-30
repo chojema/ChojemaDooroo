@@ -1,3 +1,4 @@
+import { installTerminology } from './terminology'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createEditor } from '@rhwp/editor'
 import type { ChromeVisibility, RhwpEditor } from '@rhwp/editor'
@@ -664,6 +665,24 @@ export default function App() {
       }),
     [phase],
   )
+
+  // Follow the persisted app vocabulary without reloading or editing the document.
+  useEffect(() => {
+    if (phase !== 'ready') return
+    const doc = editorRef.current?.element.contentDocument
+    if (!doc) return
+    const terminology = installTerminology(doc)
+    let disposed = false
+    let changed = false
+    const stop = window.hwpApi.onTerminologyChanged((style) => {
+      changed = true
+      terminology.setStyle(style)
+    })
+    void window.hwpApi.getTerminology().then((style) => {
+      if (!disposed && !changed) terminology.setStyle(style)
+    }).catch(() => {})
+    return () => { disposed = true; stop(); terminology.dispose() }
+  }, [phase])
 
   // keep the editor's own chrome on the app theme
   useEffect(

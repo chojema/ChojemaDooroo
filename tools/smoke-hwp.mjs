@@ -8,12 +8,27 @@ import JSZip from 'jszip'
 const work = mkdtempSync(join(tmpdir(), 'chojema-dooroo-smoke-'))
 const env = { ...process.env, CHOJEMA_DOOROO_USER_DATA: join(work, 'profile'), CHOJEMA_DOOROO_SMOKE: '1' }
 delete env.ELECTRON_RUN_AS_NODE
-const app = await electron.launch({
+const launchOptions = {
   ...(process.env.CHOJEMA_DOOROO_EXE ? { executablePath: process.env.CHOJEMA_DOOROO_EXE, args: [] } : { args: [resolve('apps/desktop')] }),
   env, timeout: 45_000,
-})
+}
+let app = await electron.launch(launchOptions)
 const errors = []
-app.process().stderr.on('data', (chunk) => { const text = chunk.toString(); if (/Error|ERR_|Unhandled/i.test(text)) errors.push(text) })
+const platformWarnings = []
+function watchErrors(application) {
+  application.process().stderr.on('data', (chunk) => {
+    for (const line of chunk.toString().split('\n').filter(Boolean)) {
+      // Chromium's scheduling-policy call can be rejected by macOS 27. Keep the
+      // diagnostic in the report, separate from app/IPC failures checked below.
+      if (process.platform === 'darwin' && /ERROR:base\/process\/process_mac\.cc:\d+\] task_policy_set TASK_(CATEGORY|SUPPRESSION)_POLICY: \(os\/kern\) invalid argument \(4\)$/.test(line)) platformWarnings.push(line)
+      else if (/Error|ERR_|Unhandled/i.test(line)) errors.push(line)
+    }
+  })
+  const watchPage = (page) => page.on('pageerror', (error) => errors.push(error.message))
+  application.context().on('page', watchPage)
+  for (const page of application.context().pages()) watchPage(page)
+}
+watchErrors(app)
 const pause = (ms) => new Promise((r) => setTimeout(r, ms))
 async function waitFile(path) {
   for (let i = 0; i < 150 && !existsSync(path); i++) await pause(200)
@@ -106,21 +121,38 @@ try {
   const back = await JSZip.loadAsync(await waitFile(roundtrip))
   const backXml = (await Promise.all(Object.keys(back.files).filter((p) => /section\d+\.xml$/.test(p)).map((p) => back.file(p).async('string')))).join('\n')
   assert.match(backXml, /Chojema HWP smoke test/, 'Text survives HWPX to HWP, reopen, and HWPX conversion')
-  // the reopened document sits in the detached window, so its settings open there
   await reopened.evaluate(() => window.hwpApi.requestFileCommand('settings'))
   await detached.getByRole('heading', { name: '설정', exact: true }).waitFor()
   await detached.getByLabel('화면 테마').selectOption('dark')
-  assert.equal(await home.locator('html').getAttribute('data-theme'), 'dark')
+  assert.equal(await detached.locator('html').getAttribute('data-theme'), 'dark')
+  assert.equal(await detached.getByLabel('인터페이스 용어').inputValue(), 'word')
+  await detached.getByLabel('인터페이스 용어').selectOption('hwp')
+  for (const editor of app.context().pages().filter((p) => p.url().includes('://hwp'))) {
+    await editor.frameLocator('iframe').locator('[data-i18n="menu.page"]').filter({ hasText: /^쪽$/ }).waitFor()
+  }
+  assert.equal(JSON.parse(readFileSync(join(env.CHOJEMA_DOOROO_USER_DATA, 'chojema-settings.json'), 'utf8')).terminology, 'hwp')
+  // Restart the real app with the same isolated profile to verify persistence.
+  await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
+  await app.close().catch(() => {})
+  app = await electron.launch(launchOptions)
+  watchErrors(app)
+  const restarted = await app.firstWindow()
+  await restarted.getByRole('tab', { name: /새 문서\.hwpx/ }).waitFor({ timeout: 30_000 })
+  await restarted.evaluate(() => window.chojema.command('settings'))
+  assert.equal(await restarted.getByLabel('인터페이스 용어').inputValue(), 'hwp')
+  await restarted.getByLabel('인터페이스 용어').selectOption('word')
+  await restarted.screenshot({ path: join(work, 'terminology-settings.png') })
   assert.deepEqual(errors, [], 'No app or optional-bridge handler errors')
-  const result = { passed: true, hwpx, hwpFile, roundtrip, editorProcessesPreserved: true, screenshots: work, errors }
+  const result = { passed: true, hwpx, hwpFile, roundtrip, editorProcessesPreserved: true, screenshots: work, errors, platformWarnings }
   writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2))
   console.log(JSON.stringify(result, null, 2))
 } catch (error) {
+  console.error(error)
   console.error(`Smoke evidence: ${work}\n${errors.join('\n')}`)
   for (const page of app.windows()) await page.screenshot({ path: join(work, `failure-${Date.now()}.png`) }).catch(() => {})
   throw error
 } finally {
-  // Test-only discard response; production close guards are never bypassed.
-  await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1, checkboxChecked: false }) }).catch(() => {})
+  // Test-only process exit: macOS keeps the app alive after its last window closes.
+  await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
   await app.close().catch(() => {})
 }
