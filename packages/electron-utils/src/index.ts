@@ -144,12 +144,6 @@ export {
 } from './print-window'
 export { abortOnDestroyed, type DestroyableSender } from './abort-on-destroyed'
 export {
-  TEMPLATE_FONTS_DIR_NAME,
-  TEMPLATE_FONTS_REPO_DIR,
-  templateFontsDir,
-  type TemplateFontsHost,
-} from './template-fonts-dir'
-export {
   RECOVERY_COPY_MAX_AGE_MS,
   RECOVERY_EDITOR_KINDS,
   createRecoveryStore,

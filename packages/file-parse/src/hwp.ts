@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { assertZipInflatesWithinLimits } from '@genoffice/docx-engine'
+import { assertZipInflatesWithinLimits } from '@genoffice/zip-gate'
 
 /**
  * Hangul word processor documents (HWP 5, HWPX, some HWP 3) to text, read by the

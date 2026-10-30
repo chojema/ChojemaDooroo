@@ -1,9 +1,3 @@
-/**
- * One shared attachable-format list for every editor's main process. The set
- * docs-main accepted before this list moved here is the baseline: the AI panel
- * shows what may be attached, so every editor must accept the same files.
- */
-
 /** plain-text extensions read as UTF-8 */
 const TEXT_EXTS = [
   'txt',
@@ -44,22 +38,11 @@ export const ATTACHABLE_IMAGE_EXTS: ReadonlySet<string> = new Set([
   'webp',
 ])
 
-/** office/pdf formats get text extracted via `parseFileToText`; images skip extraction and go multimodal */
+/** HWP/HWPX and plain-text formats get text extracted via `parseFileToText`; images skip extraction and go multimodal */
 export const ATTACHABLE_EXTS: ReadonlySet<string> = new Set([
   ...TEXT_EXTS,
-  'doc',
-  'docx',
-  'odt',
-  'pdf',
-  'pptx',
-  'ppt',
-  'xlsx',
-  'xlsm',
-  'xls',
-  'xmind',
   'hwp',
   'hwpx',
-  'epub',
   ...ATTACHABLE_IMAGE_EXTS,
 ])
 

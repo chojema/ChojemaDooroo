@@ -26,7 +26,7 @@ let result = 'Chojema Dooroo — Third-Party Software Notices\n\n'
 result += readFileSync('NOTICE', 'utf8') + '\n\n'
 result += 'The following inventory conservatively includes build dependencies. Their authors are authors of the original components, not contributors to Chojema Dooroo.\nElectron and Chromium notices also ship in LICENSES.chromium.html.\n\n'
 result += [...unique].sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => text).join('\n\n' + '='.repeat(72) + '\n\n')
-for (const dir of ['vendor/rhwp-core', 'packages/ui/template-fonts']) {
+for (const dir of ['vendor/rhwp-core']) {
   result += `\n\n${'='.repeat(72)}\n${dir}\n\n`
   for (const filename of licenseFiles(dir)) result += readFileSync(join(dir, filename), 'utf8') + '\n\n'
   for (const filename of readdirSync(dir).filter((name) => /-OFL\.txt$/.test(name))) result += readFileSync(join(dir, filename), 'utf8') + '\n\n'

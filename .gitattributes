@@ -1,20 +1,9 @@
-# Normalize line endings: everything text is committed with LF and checked
-# out as LF on every platform, so Windows clones (core.autocrlf=true) don't
-# fail the incremental prettier --check CI gate on CRLF.
 * text=auto eol=lf
 
-# Binary assets — never normalized or diffed as text.
-*.docx binary
-*.xlsx binary
-*.pptx binary
-*.doc binary
 *.hwp binary
 *.hwpx binary
-*.epub binary
-*.xmind binary
 *.wasm binary
 *.bin binary
-*.pdf binary
 *.png binary
 *.ico binary
 *.icns binary
@@ -22,6 +11,3 @@
 *.otf binary
 *.woff binary
 *.woff2 binary
-
-# Template font license texts ship byte-identical to the distributors' files.
-packages/ui/template-fonts/*.txt -text

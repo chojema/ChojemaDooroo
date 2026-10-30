@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Shared helpers for the Electron main processes (no Electron dependency, pure TS)",
+  "description": "Shared helpers for the Electron main processes",
   "exports": {
     ".": "./src/index.ts",
     "./atomic-write": "./src/atomic-write.ts",
@@ -17,7 +17,6 @@
     "./outbound-channels": "./src/outbound-channels.ts",
     "./generated-images": "./src/generated-images.ts",
     "./font-store": "./src/font-store.ts",
-    "./office-encryption": "./src/office-encryption.ts",
     "./headless-export": "./src/headless-export.ts",
     "./print-job": "./src/print-job.ts",
     "./print-window": "./src/print-window.ts",
@@ -31,19 +30,13 @@
     "./generate-handoff": "./src/generate-handoff.ts",
     "./unsaved-files": "./src/unsaved-files.ts",
     "./user-skills-bridge": "./src/user-skills-bridge.ts",
-    "./user-skills-channels": "./src/user-skills-channels.ts",
-    "./template-font-response": "./src/template-font-response.ts",
-    "./template-fonts-dir": "./src/template-fonts-dir.ts"
+    "./user-skills-channels": "./src/user-skills-channels.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "officecrypto-tool": "^0.0.19",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "parse5": "^8.0.1",
