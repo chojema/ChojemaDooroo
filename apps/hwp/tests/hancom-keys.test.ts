@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { JSDOM } from 'jsdom'
 import { describe, expect, it, vi } from 'vitest'
 import {
   ADDED_SHORTCUTS,
@@ -18,8 +19,11 @@ import {
   hancomCommands,
   hancomContextKey,
   hancomTableObjectKey,
+  installHancomStatusBar,
   letterOf,
   MAIN_PROCESS_KEYS,
+  normalizeHancomPageLabel,
+  normalizeHancomSectionLabel,
   resizeRowColumnBlock,
   resizeSelectedCell,
   studioCommandIds,
@@ -1415,5 +1419,152 @@ describe('against the studio source the build fetched', () => {
     expect(match({ key: 'M', code: 'KeyM', ctrlKey: true, shiftKey: true })).toBe(
       'format:align-justify',
     )
+  })
+})
+
+describe('Hancom status bar (상황 선)', () => {
+  it('normalizes page and section labels to Hancom compact format', () => {
+    hancomCommands('ko', {})
+    expect(normalizeHancomPageLabel('1 / 1 쪽')).toBe('1/1쪽')
+    expect(normalizeHancomPageLabel('3 / 12 쪽')).toBe('3/12쪽')
+    expect(normalizeHancomSectionLabel('구역: 1 / 1')).toBe('1/1 구역')
+    expect(normalizeHancomSectionLabel('구역: 2 / 4')).toBe('2/4 구역')
+  })
+
+  it('installs the full Hancom status bar items and updates live on cursor/document events', () => {
+    hancomCommands('ko', {})
+    const { window } = new JSDOM(`
+      <!doctype html><html><head></head><body>
+      <footer id="status-bar">
+        <button id="sb-page" class="stb-item stb-page-button" type="button">1 / 1 쪽</button>
+        <span class="stb-divider"></span>
+        <span id="sb-section" class="stb-item">구역: 1 / 1</span>
+        <span class="stb-divider"></span>
+        <span id="sb-mode" class="stb-item">삽입</span>
+        <span id="sb-cell-selection" class="stb-item stb-cell-selection" hidden></span>
+        <span id="sb-field" class="stb-item" style="display:none"></span>
+        <span id="sb-message" class="stb-message"></span>
+        <span class="stb-right">
+          <button id="sb-zoom-fit-width" class="stb-icon-btn"></button>
+          <button id="sb-zoom-fit" class="stb-icon-btn"></button>
+          <button id="sb-zoom-out" class="stb-icon-btn"></button>
+          <span class="stb-zoom-range-wrap">
+            <input id="sb-zoom-range" class="stb-zoom-range" type="range" min="0" max="1000" value="500">
+            <span class="stb-zoom-neutral-mark"></span>
+          </span>
+          <button id="sb-zoom-in" class="stb-icon-btn"></button>
+          <button id="sb-zoom-display" class="stb-zoom-display" type="button">
+            <span id="sb-zoom-val">100%</span>
+          </button>
+        </span>
+      </footer>
+      </body></html>
+    `)
+    const { document } = window
+
+    const listeners = new Map<string, Array<(payload?: unknown) => void>>()
+    const eventBus = {
+      on(event: string, fn: (payload?: unknown) => void) {
+        const list = listeners.get(event) ?? []
+        list.push(fn)
+        listeners.set(event, list)
+      },
+      emit(event: string, payload?: unknown) {
+        for (const fn of listeners.get(event) ?? []) fn(payload)
+      },
+    }
+
+    let pos = { sectionIndex: 0, paragraphIndex: 0, charOffset: 0 }
+    let paraLengths = [0]
+    let inCellSel = false
+    const ih = {
+      insertMode: true,
+      caret: { setOverwrite: vi.fn() },
+      cursor: {
+        rect: { pageIndex: 0, x: 40, y: 40, height: 16 },
+        isInCellSelectionMode: () => inCellSel,
+        isInTableObjectSelection: () => false,
+        isInPictureObjectSelection: () => false,
+        isInHeaderFooter: () => false,
+        isInFootnote: () => false,
+      },
+      getCursorPosition: () => pos,
+      hasSelection: () => false,
+      isFormMode: () => false,
+    }
+    const wasm = {
+      pageCount: 1,
+      getSectionCount: () => 1,
+      getPageInfo: () => ({
+        pageIndex: 0,
+        pageNumber: 1,
+        sectionIndex: 0,
+        columns: [{ x: 20, width: 200 }, { x: 260, width: 200 }],
+      }),
+      getParagraphCount: () => paraLengths.length,
+      getParagraphLength: (_s: number, p: number) => paraLengths[p] ?? 0,
+      getLineInfo: (_s: number, p: number, offset: number) => ({
+        lineIndex: p === 1 ? 1 : 0,
+        lineCount: p === 0 ? 2 : 2,
+        charStart: p === 1 ? 5 : 0,
+        charEnd: offset,
+      }),
+    }
+    const dispatcher = {
+      services: { wasm, eventBus },
+      eventBus,
+      dispatch: vi.fn(),
+    }
+
+    const ctrl = installHancomStatusBar(window, () => ih, dispatcher)
+    expect(ctrl).not.toBeNull()
+
+    expect(document.getElementById('sb-page')?.textContent).toBe('1/1쪽')
+    expect(document.getElementById('sb-column')?.textContent).toBe('1단')
+    expect(document.getElementById('sb-line')?.textContent).toBe('1줄')
+    expect(document.getElementById('sb-char-col')?.textContent).toBe('1칸')
+    expect(document.getElementById('sb-char-count')?.textContent).toBe('0글자')
+    expect(document.getElementById('sb-context')?.textContent).toBe('문자 입력')
+    expect(document.getElementById('sb-section')?.textContent).toBe('1/1 구역')
+    expect(document.getElementById('sb-mode')?.textContent).toBe('삽입')
+    expect(document.getElementById('sb-track-changes')?.textContent).toBe('변경 내용 [기록 중지]')
+    expect(document.getElementById('sb-typing-speed')?.textContent).toBe('타수 : 0타')
+    expect(document.getElementById('sb-page-single')).not.toBeNull()
+
+    // Direct studio writes to #sb-page and #sb-section are intercepted and normalized
+    document.getElementById('sb-page')!.textContent = '1 / 1 쪽'
+    document.getElementById('sb-section')!.textContent = '구역: 1 / 1'
+    expect(document.getElementById('sb-page')?.textContent).toBe('1/1쪽')
+    expect(document.getElementById('sb-section')?.textContent).toBe('1/1 구역')
+
+    // Move cursor to 2nd column, 2nd paragraph (which has 2 prior lines + lineIndex 1 = 4줄), charOffset 8 (charStart 5 => 4칸)
+    paraLengths = [10, 12]
+    pos = { sectionIndex: 0, paragraphIndex: 1, charOffset: 8 }
+    ih.cursor.rect = { pageIndex: 0, x: 280, y: 100, height: 16 }
+    inCellSel = true
+    eventBus.emit('document-changed')
+
+    expect(document.getElementById('sb-column')?.textContent).toBe('2단')
+    expect(document.getElementById('sb-line')?.textContent).toBe('4줄')
+    expect(document.getElementById('sb-char-col')?.textContent).toBe('4칸')
+    expect(document.getElementById('sb-char-count')?.textContent).toBe('22글자')
+    expect(document.getElementById('sb-context')?.textContent).toBe('셀 블록')
+
+    // Click #sb-track-changes -> dispatches edit:document-history
+    document.getElementById('sb-track-changes')?.click()
+    expect(dispatcher.dispatch).toHaveBeenCalledWith('edit:document-history')
+
+    // Click #sb-page-single -> dispatches view:zoom-100
+    document.getElementById('sb-page-single')?.click()
+    expect(dispatcher.dispatch).toHaveBeenCalledWith('view:zoom-100')
+
+    // Click #sb-mode -> toggles insertMode and emits insert-mode-changed
+    document.getElementById('sb-mode')?.click()
+    expect(ih.insertMode).toBe(false)
+    expect(ih.caret.setOverwrite).toHaveBeenCalledWith(true)
+
+    // Typing strokes update #sb-typing-speed
+    ctrl?.recordTypingStroke(3)
+    expect(document.getElementById('sb-typing-speed')?.textContent).toMatch(/^타수 : \d+타$/)
   })
 })

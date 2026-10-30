@@ -303,6 +303,579 @@ export function installHancomMainKeys(win, getInputHandler, dispatcher) {
       return false
     }
   }
+  if (win?.document?.getElementById?.('status-bar')) {
+    installHancomStatusBar(win, getInputHandler, dispatcher)
+  }
+}
+
+const HANCOM_STATUS_BAR_STYLE_ID = 'ieum-hancom-status-bar-style'
+
+const HANCOM_STATUS_BAR_CSS = `
+#status-bar {
+  height: 24px;
+  background: var(--bg-toolbar, #f5f6f7);
+  border-top: 1px solid var(--border-color, #d0d3d8);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11.5px;
+  color: var(--text-primary, #333333);
+  gap: 0;
+  flex-shrink: 0;
+  user-select: none;
+}
+#status-bar .stb-item {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 9px;
+  white-space: nowrap;
+  color: var(--text-primary, #333333);
+  font-variant-numeric: tabular-nums;
+}
+#status-bar .stb-page-button {
+  padding: 0 9px;
+  height: 100%;
+  border-radius: 0;
+  font-size: 11.5px;
+  color: var(--text-primary, #333333);
+}
+#status-bar .stb-section-box {
+  background: rgba(0, 0, 0, 0.06);
+  border-left: 1px solid var(--border-color, #d0d3d8);
+  border-right: 1px solid var(--border-color, #d0d3d8);
+  padding: 0 10px;
+}
+[data-theme="dark"] #status-bar .stb-section-box {
+  background: rgba(255, 255, 255, 0.08);
+}
+#status-bar .stb-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color, #d0d3d8);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+#status-bar .stb-clickable {
+  cursor: pointer;
+}
+#status-bar .stb-clickable:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+#status-bar .stb-track-changes {
+  border: none;
+  background: transparent;
+  color: #0066cc;
+  font: inherit;
+  font-size: 11.5px;
+  padding: 0 10px;
+  height: 100%;
+  cursor: pointer;
+}
+#status-bar .stb-track-changes:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+[data-theme="dark"] #status-bar .stb-track-changes {
+  color: #4da3ff;
+}
+#status-bar #sb-message {
+  padding-left: 8px;
+  font-size: 11px;
+  color: var(--text-secondary, #666666);
+}
+#status-bar .stb-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 8px;
+}
+#status-bar .stb-icon-btn {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#status-bar .stb-hancom-icon {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+`
+
+function interceptTextContent(el, transform) {
+  if (!el || el._hancomTextIntercepted) return
+  let proto = Object.getPrototypeOf(el)
+  let desc = null
+  while (proto && !desc) {
+    desc = Object.getOwnPropertyDescriptor(proto, 'textContent')
+    proto = Object.getPrototypeOf(proto)
+  }
+  if (!desc?.get || !desc?.set) return
+  el._hancomTextIntercepted = true
+  Object.defineProperty(el, 'textContent', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return desc.get.call(this)
+    },
+    set(val) {
+      desc.set.call(this, transform(String(val ?? '')))
+    },
+  })
+}
+
+export function normalizeHancomPageLabel(raw) {
+  const m = String(raw ?? '').match(/(\d+)\s*\/\s*(\d+)/)
+  if (!m) return String(raw ?? '')
+  return koreanUi !== false ? `${m[1]}/${m[2]}쪽` : `${m[1]}/${m[2]} pages`
+}
+
+export function normalizeHancomSectionLabel(raw) {
+  const m = String(raw ?? '').match(/(\d+)\s*\/\s*(\d+)/)
+  if (!m) return String(raw ?? '')
+  return koreanUi !== false ? `${m[1]}/${m[2]} 구역` : `${m[1]}/${m[2]} Sec`
+}
+
+function createStatusIconSvg(doc, paths) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const svg = doc.createElementNS(ns, 'svg')
+  svg.setAttribute('class', 'stb-hancom-icon')
+  svg.setAttribute('viewBox', '0 0 16 16')
+  svg.setAttribute('aria-hidden', 'true')
+  for (const [tag, attrs] of paths) {
+    const node = doc.createElementNS(ns, tag)
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v)
+    svg.appendChild(node)
+  }
+  return svg
+}
+
+/**
+ * Upgrades `<footer id="status-bar">` to Hancom Hangul's bottom status bar (`상황 선`):
+ * `1/1쪽 | 1단 | 1줄 | 1칸 | 0글자 | 문자 입력 | 1/1 구역 | 삽입 | 변경 내용 [기록 중지] | 타수 : 0타`
+ * and the right-side page-fit / width-fit / single-page / zoom controls.
+ */
+export function installHancomStatusBar(win, getInputHandler, dispatcher) {
+  const doc = win?.document
+  const bar = doc?.getElementById?.('status-bar')
+  if (!doc || !bar || bar.dataset.hancomStatusBar === '1') return null
+  bar.dataset.hancomStatusBar = '1'
+
+  if (doc.head && !doc.getElementById(HANCOM_STATUS_BAR_STYLE_ID)) {
+    const style = doc.createElement('style')
+    style.id = HANCOM_STATUS_BAR_STYLE_ID
+    style.textContent = HANCOM_STATUS_BAR_CSS
+    doc.head.appendChild(style)
+  }
+
+  const services = dispatcher?.services ?? null
+  const eventBus = dispatcher?.eventBus ?? services?.eventBus ?? null
+  const wasm = services?.wasm ?? null
+
+  const sbPage = doc.getElementById('sb-page')
+  const sbSection = doc.getElementById('sb-section')
+  const sbMode = doc.getElementById('sb-mode')
+  const sbCellSel = doc.getElementById('sb-cell-selection')
+  const sbField = doc.getElementById('sb-field')
+  const sbMessage = doc.getElementById('sb-message')
+  const sbRight = bar.querySelector('.stb-right')
+
+  const makeSpan = (id, text, className = 'stb-item') => {
+    let el = doc.getElementById(id)
+    if (!el) {
+      el = doc.createElement('span')
+      el.id = id
+    }
+    el.className = className
+    el.textContent = text
+    return el
+  }
+
+  const sbColumn = makeSpan('sb-column', '1단')
+  const sbLine = makeSpan('sb-line', '1줄')
+  const sbCharCol = makeSpan('sb-char-col', '1칸')
+  const sbCharCount = makeSpan('sb-char-count', '0글자')
+  const sbContext = makeSpan('sb-context', '문자 입력')
+  const sbTypingSpeed = makeSpan('sb-typing-speed', '타수 : 0타')
+
+  let sbTrackChanges = doc.getElementById('sb-track-changes')
+  if (!sbTrackChanges) {
+    sbTrackChanges = doc.createElement('button')
+    sbTrackChanges.id = 'sb-track-changes'
+    sbTrackChanges.type = 'button'
+  }
+  sbTrackChanges.className = 'stb-item stb-track-changes'
+  sbTrackChanges.title = '문서 이력 관리'
+  sbTrackChanges.textContent = '변경 내용 [기록 중지]'
+  sbTrackChanges.addEventListener('click', (e) => {
+    e.preventDefault()
+    dispatcher?.dispatch?.('edit:document-history')
+  })
+
+  if (sbPage) {
+    interceptTextContent(sbPage, normalizeHancomPageLabel)
+    sbPage.textContent = normalizeHancomPageLabel(sbPage.textContent || '1/1쪽')
+  }
+  if (sbSection) {
+    sbSection.className = 'stb-item stb-section-box'
+    interceptTextContent(sbSection, normalizeHancomSectionLabel)
+    sbSection.textContent = normalizeHancomSectionLabel(sbSection.textContent || '1/1 구역')
+  }
+  if (sbMode) {
+    sbMode.className = 'stb-item stb-clickable'
+    sbMode.title = '삽입/수정 전환 (Insert)'
+    sbMode.addEventListener('click', (e) => {
+      e.preventDefault()
+      const ih = getInputHandler?.()
+      if (!ih) return
+      const next = !(ih.insertMode ?? true)
+      ih.insertMode = next
+      ih.caret?.setOverwrite?.(!next)
+      eventBus?.emit?.('insert-mode-changed', next)
+    })
+  }
+  if (sbCellSel) {
+    sbCellSel.hidden = true
+    sbCellSel.style.display = 'none'
+  }
+  if (sbField) {
+    sbField.style.display = 'none'
+  }
+
+  // Clear old dividers and rebuild left-to-right order matching Hancom Hangul
+  bar.querySelectorAll(':scope > .stb-divider').forEach((d) => d.remove())
+  const makeDivider = () => {
+    const d = doc.createElement('span')
+    d.className = 'stb-divider'
+    return d
+  }
+
+  const orderedLeft = [
+    sbPage,
+    sbColumn,
+    sbLine,
+    sbCharCol,
+    sbCharCount,
+    sbContext,
+    sbSection,
+    sbMode,
+    makeDivider(),
+    sbTrackChanges,
+    makeDivider(),
+    sbTypingSpeed,
+    makeDivider(),
+    sbCellSel,
+    sbField,
+    sbMessage,
+  ].filter(Boolean)
+
+  for (const node of orderedLeft) {
+    if (sbRight) bar.insertBefore(node, sbRight)
+    else bar.appendChild(node)
+  }
+
+  // Upgrade right-side icons and order: [쪽 맞춤] [폭 맞춤] [단쪽 보기] [-] ──○── [+] 🔍 100%
+  if (sbRight) {
+    const btnFitPage = doc.getElementById('sb-zoom-fit')
+    const btnFitWidth = doc.getElementById('sb-zoom-fit-width')
+    const btnZoomOut = doc.getElementById('sb-zoom-out')
+    const btnZoomIn = doc.getElementById('sb-zoom-in')
+
+    let btnPageSingle = doc.getElementById('sb-page-single')
+    if (!btnPageSingle) {
+      btnPageSingle = doc.createElement('button')
+      btnPageSingle.id = 'sb-page-single'
+      btnPageSingle.type = 'button'
+      btnPageSingle.className = 'stb-icon-btn'
+      btnPageSingle.title = '단쪽 보기 (100%)'
+      btnPageSingle.addEventListener('click', (e) => {
+        e.preventDefault()
+        dispatcher?.dispatch?.('view:zoom-100')
+      })
+    }
+
+    if (btnFitPage) {
+      btnFitPage.replaceChildren(
+        createStatusIconSvg(doc, [
+          ['rect', { x: '1.5', y: '1.5', width: '13', height: '13', fill: '#ffffff', stroke: '#7a7e85', 'stroke-width': '1' }],
+          ['path', { d: 'M4 13V4h8v9', fill: 'none', stroke: '#1a68e5', 'stroke-width': '1.4' }],
+        ]),
+      )
+    }
+    if (btnFitWidth) {
+      btnFitWidth.replaceChildren(
+        createStatusIconSvg(doc, [
+          ['rect', { x: '1.5', y: '1.5', width: '13', height: '13', fill: '#ffffff', stroke: '#7a7e85', 'stroke-width': '1' }],
+          ['path', { d: 'M3.5 8h9M5.8 5.7 3.5 8l2.3 2.3M10.2 5.7 12.5 8l-2.3 2.3', fill: 'none', stroke: '#1a68e5', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }],
+        ]),
+      )
+    }
+    btnPageSingle.replaceChildren(
+      createStatusIconSvg(doc, [
+        ['rect', { x: '1.5', y: '1.5', width: '13', height: '13', fill: '#ffffff', stroke: '#7a7e85', 'stroke-width': '1' }],
+        ['rect', { x: '4', y: '3.5', width: '8', height: '9', fill: 'none', stroke: '#1a68e5', 'stroke-width': '1.3' }],
+      ]),
+    )
+    if (btnZoomOut) {
+      btnZoomOut.replaceChildren(
+        createStatusIconSvg(doc, [
+          ['rect', { x: '2', y: '2', width: '12', height: '12', fill: '#ffffff', stroke: '#6e7278', 'stroke-width': '1' }],
+          ['rect', { x: '4.5', y: '4.5', width: '7', height: '7', fill: '#d4d7dc', stroke: '#6e7278', 'stroke-width': '1' }],
+        ]),
+      )
+    }
+    if (btnZoomIn) {
+      btnZoomIn.replaceChildren(
+        createStatusIconSvg(doc, [
+          ['rect', { x: '2', y: '2', width: '12', height: '12', fill: '#ffffff', stroke: '#6e7278', 'stroke-width': '1' }],
+          ['rect', { x: '3.8', y: '3.8', width: '8.4', height: '8.4', fill: '#d4d7dc', stroke: '#6e7278', 'stroke-width': '1' }],
+        ]),
+      )
+    }
+
+    if (btnFitPage && btnFitWidth) {
+      sbRight.insertBefore(btnFitPage, btnFitWidth)
+      btnFitWidth.after(btnPageSingle)
+    } else if (btnZoomOut) {
+      sbRight.insertBefore(btnPageSingle, btnZoomOut)
+    }
+  }
+
+  let cachedBodyChars = null
+  let lastFieldInfo = null
+  let strokeTimes = []
+  let typingResetTimer = null
+
+  function computeBodyCharCount() {
+    if (!wasm || !(wasm.pageCount > 0)) return 0
+    if (cachedBodyChars !== null) return cachedBodyChars
+    let total = 0
+    try {
+      const secCount = Math.max(1, wasm.getSectionCount?.() ?? 1)
+      for (let s = 0; s < secCount; s += 1) {
+        const paraCount = Math.min(500, wasm.getParagraphCount?.(s) ?? 0)
+        for (let p = 0; p < paraCount; p += 1) {
+          total += Math.max(0, wasm.getParagraphLength?.(s, p) ?? 0)
+        }
+      }
+    } catch {
+      // ignore wasm errors while document is mid-swap
+    }
+    cachedBodyChars = total
+    return total
+  }
+
+  function computeCurrentCellCharCount(pos) {
+    if (
+      !wasm ||
+      pos?.parentParaIndex === undefined ||
+      pos?.controlIndex === undefined ||
+      pos?.cellIndex === undefined
+    ) {
+      return 0
+    }
+    let total = 0
+    try {
+      const count = Math.min(
+        200,
+        wasm.getCellParagraphCount?.(
+          pos.sectionIndex,
+          pos.parentParaIndex,
+          pos.controlIndex,
+          pos.cellIndex,
+        ) ?? 0,
+      )
+      for (let cp = 0; cp < count; cp += 1) {
+        total += Math.max(
+          0,
+          wasm.getCellParagraphLength?.(
+            pos.sectionIndex,
+            pos.parentParaIndex,
+            pos.controlIndex,
+            pos.cellIndex,
+            cp,
+          ) ?? 0,
+        )
+      }
+    } catch {
+      // ignore
+    }
+    return total
+  }
+
+  function resolveContextLabel(ih) {
+    if (ih?.isFormMode?.()) return '양식 모드'
+    const cursor = ih?.cursor
+    if (cursor?.isInCellSelectionMode?.()) return '셀 블록'
+    if (cursor?.isInTableObjectSelection?.() || cursor?.isInPictureObjectSelection?.()) {
+      return '개체 선택'
+    }
+    if (cursor?.isInHeaderFooter?.()) {
+      return cursor.headerFooterMode === 'footer' ? '꼬리말 편집' : '머리말 편집'
+    }
+    if (cursor?.isInFootnote?.()) return '각주 편집'
+    if (lastFieldInfo?.inField) {
+      return lastFieldInfo.guideName ? `[누름틀] ${lastFieldInfo.guideName}` : '누름틀 입력'
+    }
+    if (ih?.hasSelection?.()) return '블록 선택'
+    return '문자 입력'
+  }
+
+  function syncStatusBar() {
+    const ih = getInputHandler?.()
+    const cursor = ih?.cursor
+    const pos = ih?.getCursorPosition?.() ?? cursor?.getPosition?.() ?? null
+    const pageCount = Math.max(1, wasm?.pageCount ?? 1)
+    const secCount = Math.max(1, wasm?.getSectionCount?.() ?? 1)
+    const rect = cursor?.rect ?? null
+    const pageIdx = Math.max(0, Math.min(pageCount - 1, rect?.pageIndex ?? 0))
+
+    let pageNum = pageIdx + 1
+    let secIdx = pos?.sectionIndex ?? 0
+    let colNum = 1
+    if (wasm && wasm.pageCount > 0) {
+      try {
+        const pageInfo = wasm.getPageInfo?.(pageIdx)
+        if (typeof pageInfo?.pageNumber === 'number' && pageInfo.pageNumber >= 1) {
+          pageNum = Math.floor(pageInfo.pageNumber)
+        }
+        if (typeof pageInfo?.sectionIndex === 'number') {
+          secIdx = pageInfo.sectionIndex
+        }
+        if (Array.isArray(pageInfo?.columns) && pageInfo.columns.length > 1 && typeof rect?.x === 'number') {
+          let matched = 1
+          for (let i = 0; i < pageInfo.columns.length; i += 1) {
+            if (rect.x + 2 >= pageInfo.columns[i].x) matched = i + 1
+          }
+          colNum = matched
+        }
+      } catch {
+        // fallback to defaults
+      }
+    }
+
+    let lineNum = 1
+    let charCol = Math.max(1, (pos?.charOffset ?? 0) + 1)
+    if (wasm && wasm.pageCount > 0 && pos) {
+      try {
+        if (
+          pos.parentParaIndex !== undefined &&
+          pos.controlIndex !== undefined &&
+          pos.cellIndex !== undefined
+        ) {
+          const cellPara = pos.cellParaIndex ?? pos.paragraphIndex ?? 0
+          let priorLines = 0
+          const limit = Math.min(cellPara, 150)
+          for (let p = 0; p < limit; p += 1) {
+            const li = wasm.getLineInfoInCell?.(
+              pos.sectionIndex,
+              pos.parentParaIndex,
+              pos.controlIndex,
+              pos.cellIndex,
+              p,
+              0,
+            )
+            priorLines += Math.max(1, li?.lineCount ?? 1)
+          }
+          const cur = wasm.getLineInfoInCell?.(
+            pos.sectionIndex,
+            pos.parentParaIndex,
+            pos.controlIndex,
+            pos.cellIndex,
+            cellPara,
+            pos.charOffset ?? 0,
+          )
+          lineNum = priorLines + (cur?.lineIndex ?? 0) + 1
+          charCol = Math.max(1, (pos.charOffset ?? 0) - (cur?.charStart ?? 0) + 1)
+        } else {
+          const para = pos.paragraphIndex ?? 0
+          let priorLines = 0
+          const limit = Math.min(para, 150)
+          for (let p = 0; p < limit; p += 1) {
+            const li = wasm.getLineInfo?.(pos.sectionIndex, p, 0)
+            priorLines += Math.max(1, li?.lineCount ?? 1)
+          }
+          const cur = wasm.getLineInfo?.(pos.sectionIndex, para, pos.charOffset ?? 0)
+          lineNum = priorLines + (cur?.lineIndex ?? 0) + 1
+          charCol = Math.max(1, (pos.charOffset ?? 0) - (cur?.charStart ?? 0) + 1)
+        }
+      } catch {
+        // fallback to defaults
+      }
+    }
+
+    const totalChars = computeBodyCharCount() + computeCurrentCellCharCount(pos)
+    if (sbPage) sbPage.textContent = `${pageNum}/${pageCount}쪽`
+    sbColumn.textContent = `${colNum}단`
+    sbLine.textContent = `${lineNum}줄`
+    sbCharCol.textContent = `${charCol}칸`
+    sbCharCount.textContent = `${totalChars}글자`
+    sbContext.textContent = resolveContextLabel(ih)
+    if (sbSection) sbSection.textContent = `${Math.min(secCount, secIdx + 1)}/${secCount} 구역`
+  }
+
+  function recordTypingStroke(weight = 1) {
+    const now = Date.now()
+    for (let i = 0; i < weight; i += 1) strokeTimes.push(now)
+    const cutoff = now - 10000
+    strokeTimes = strokeTimes.filter((t) => t >= cutoff)
+    const elapsedMs = Math.max(2000, now - (strokeTimes[0] ?? now))
+    const cpm = Math.round((strokeTimes.length * 60000) / elapsedMs)
+    sbTypingSpeed.textContent = `타수 : ${cpm}타`
+    if (typingResetTimer) clearTimeout(typingResetTimer)
+    typingResetTimer = setTimeout(() => {
+      strokeTimes = []
+      sbTypingSpeed.textContent = '타수 : 0타'
+    }, 3500)
+  }
+
+  doc.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const key = e.key ?? ''
+      if (key === 'Process' || key.length === 1 || key === 'Enter' || key === ' ') {
+        recordTypingStroke(1)
+      }
+    },
+    true,
+  )
+
+  if (eventBus?.on) {
+    const invalidateAndSync = () => {
+      cachedBodyChars = null
+      syncStatusBar()
+    }
+    eventBus.on('document-changed', invalidateAndSync)
+    eventBus.on('document-mutated', invalidateAndSync)
+    eventBus.on('document-swapped', () => {
+      cachedBodyChars = null
+      lastFieldInfo = null
+      strokeTimes = []
+      sbTypingSpeed.textContent = '타수 : 0타'
+      syncStatusBar()
+    })
+    eventBus.on('cursor-rect-updated', syncStatusBar)
+    eventBus.on('cursor-format-changed', syncStatusBar)
+    eventBus.on('cursor-para-changed', syncStatusBar)
+    eventBus.on('current-page-changed', syncStatusBar)
+    eventBus.on('cell-selection-phase-changed', syncStatusBar)
+    eventBus.on('table-object-selection-changed', syncStatusBar)
+    eventBus.on('picture-object-selection-changed', syncStatusBar)
+    eventBus.on('headerFooterModeChanged', syncStatusBar)
+    eventBus.on('footnoteModeChanged', syncStatusBar)
+    eventBus.on('edit-mode-changed', syncStatusBar)
+    eventBus.on('field-info-changed', (info) => {
+      lastFieldInfo = info ?? null
+      syncStatusBar()
+    })
+  }
+
+  syncStatusBar()
+  return { syncStatusBar, recordTypingStroke }
 }
 
 const MODIFIER_KEYS = new Set([
