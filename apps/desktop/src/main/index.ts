@@ -21,9 +21,9 @@ import { autoUpdater } from 'electron-updater'
 import { CHANNEL, STATE_CHANNEL, RELEASES, editorForPath, paneBounds } from '../shared/contracts'
 import type { AppState, EditorKind } from '../shared/contracts'
 
-// Chojema Docs host. Editor engines and their save protections stay upstream-owned.
-app.setName('Chojema Docs')
-app.setPath('userData', process.env.CHOJEMA_DOCS_USER_DATA ?? join(app.getPath('appData'), app.isPackaged ? 'ChojemaDocs' : 'ChojemaDocs-Dev'))
+// Chojema Dooroo host. Editor engines and their save protections stay upstream-owned.
+app.setName('Chojema Dooroo')
+app.setPath('userData', process.env.CHOJEMA_DOOROO_USER_DATA ?? join(app.getPath('appData'), app.isPackaged ? 'ChojemaDocs' : 'ChojemaDocs-Dev'))
 if (process.platform === 'win32') app.setAppUserModelId('io.github.chojema.docs')
 registerRendererScheme()
 installNavigationGuard(app)
@@ -98,7 +98,7 @@ function layout(host: Host) {
     if (visible) tab.view.setBounds(tab.id === host.secondary ? bounds.secondary : bounds.primary)
     tab.view.webContents.send('app:split-role-changed', split ? (tab.id === host.active ? 'focus' : 'secondary') : null)
   }
-  host.win.setTitle(activeTab(host) && host.page === 'editor' ? `${activeTab(host)!.title} — Chojema Docs` : 'Chojema Docs')
+  host.win.setTitle(activeTab(host) && host.page === 'editor' ? `${activeTab(host)!.title} — Chojema Dooroo` : 'Chojema Dooroo')
   publish(host)
 }
 function activate(host: Host, id: string) {
@@ -231,7 +231,7 @@ async function checkUpdate() {
   try { await autoUpdater.checkForUpdates() } catch { updateMessage = '업데이트를 확인하지 못했습니다. 배포 페이지를 이용해 주세요.'; publishAll() }
 }
 async function about(host: Host) {
-  await dialog.showMessageBox(host.win, { title: 'Chojema Docs 정보', message: `Chojema Docs ${app.getVersion()}`, detail: '제작 및 유지관리: Chojema\n\nGenOffice와 IeumOffice의 공용 코드를 바탕으로 구성했습니다. HWP/HWPX 편집기는 rhwp를 사용합니다. 원저작권과 제삼자 라이선스는 LICENSE, NOTICE, THIRD-PARTY-NOTICES.txt에 보존합니다.\n\n본 제품은 한글과컴퓨터의 한글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.', buttons: ['닫기', '라이선스 폴더 열기'] }).then((result) => {
+  await dialog.showMessageBox(host.win, { title: 'Chojema Dooroo 정보', message: `Chojema Dooroo ${app.getVersion()}`, detail: '제작 및 유지관리: Chojema\n\nGenOffice와 IeumOffice의 공용 코드를 바탕으로 구성했습니다. HWP/HWPX 편집기는 rhwp를 사용합니다. 원저작권과 제삼자 라이선스는 LICENSE, NOTICE, THIRD-PARTY-NOTICES.txt에 보존합니다.\n\n본 제품은 한글과컴퓨터의 한글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.', buttons: ['닫기', '라이선스 폴더 열기'] }).then((result) => {
     if (result.response === 1) void shell.openPath(app.isPackaged ? process.resourcesPath : resolve(__dirname, '../../../../'))
   })
 }
@@ -286,8 +286,8 @@ function registerSharedIpc() {
     'app:get-theme': () => settings.theme,
     'app:get-document-theme': () => 'follow',
     'app:get-auto-save-default': () => 'off',
-    'app:get-author-name': () => 'Chojema Docs',
-    'home:get-author-name': () => ({ value: '', fallback: 'Chojema Docs' }),
+    'app:get-author-name': () => 'Chojema Dooroo',
+    'home:get-author-name': () => ({ value: '', fallback: 'Chojema Dooroo' }),
     'app:get-ai-panel-prefs': () => settings.aiPrefs,
     'skills:list': () => [],
     'skills:take-handoff': () => null,
@@ -336,7 +336,7 @@ function registerSharedIpc() {
 
 function installMenu() {
   const template: MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin' ? [{ label: 'Chojema Docs', submenu: [{ role: 'about' as const }, { role: 'quit' as const }] }] : []),
+    ...(process.platform === 'darwin' ? [{ label: 'Chojema Dooroo', submenu: [{ role: 'about' as const }, { role: 'quit' as const }] }] : []),
     { label: '파일', submenu: [
       { label: '새 한글 문서', accelerator: 'CmdOrCtrl+N', click: () => openTab(focusedHost(), 'hwp') },
       { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => { void openDialog(focusedHost()) } },
@@ -351,11 +351,11 @@ function installMenu() {
       { label: '다음 문서', accelerator: 'Ctrl+Tab', click: () => { const host = focusedHost(); const index = host.tabs.findIndex((t) => t.id === host.active); const tab = host.tabs[(index + 1) % host.tabs.length]; if (tab) activate(host, tab.id) } },
       { label: '앱 설정', click: () => { const host = focusedHost(); host.page = 'settings'; layout(host) } },
       { role: 'togglefullscreen', label: '전체 화면' },
-      ...(!app.isPackaged || process.env.CHOJEMA_DOCS_SMOKE ? [{ role: 'toggleDevTools' as const }] : []),
+      ...(!app.isPackaged || process.env.CHOJEMA_DOOROO_SMOKE ? [{ role: 'toggleDevTools' as const }] : []),
     ] },
     { label: '도움말', submenu: [
       { label: '업데이트 확인', click: () => { void checkUpdate() } },
-      { label: 'Chojema Docs 정보', click: () => { void about(focusedHost()) } },
+      { label: 'Chojema Dooroo 정보', click: () => { void about(focusedHost()) } },
     ] },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
@@ -379,7 +379,7 @@ else {
     installMenu()
     const host = createHost()
     for (const path of [...pendingPaths, ...process.argv.filter((p) => editorForPath(p) && isAbsolute(p))]) await openPath(host, path).catch(() => {})
-    autoUpdater.setFeedURL({ provider: 'github', owner: 'chojema', repo: 'ChojemaDocs' })
+    autoUpdater.setFeedURL({ provider: 'github', owner: 'chojema', repo: 'ChojemaDooroo' })
     autoUpdater.allowPrerelease = app.getVersion().includes('-')
     autoUpdater.autoDownload = false
     autoUpdater.autoInstallOnAppQuit = false
@@ -392,7 +392,7 @@ else {
     autoUpdater.on('update-not-available', () => { updateMessage = '현재 최신 버전입니다.'; publishAll() })
     autoUpdater.on('update-downloaded', () => { updateReady = true; updateMessage = '다운로드 완료. 작업을 저장한 뒤 업데이트를 설치하세요.'; publishAll() })
     autoUpdater.on('error', () => { updateMessage = '업데이트를 확인하지 못했습니다. 배포 페이지를 이용해 주세요.'; publishAll() })
-    if (app.isPackaged && !process.env.CHOJEMA_DOCS_SMOKE) {
+    if (app.isPackaged && !process.env.CHOJEMA_DOOROO_SMOKE) {
       setTimeout(() => { void checkUpdate() }, 20_000)
       updateTimer = setInterval(() => { void checkUpdate() }, 4 * 60 * 60 * 1000)
     }

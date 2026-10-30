@@ -1,5 +1,5 @@
 /** Shared document-assistant IPC extracted from IeumOffice/GenOffice.
- * Chojema Docs modification: no Word editor or document-open/save host.
+ * Chojema Dooroo modification: no Word editor or document-open/save host.
  * Original copyrights and license: see NOTICE and LICENSE. */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'

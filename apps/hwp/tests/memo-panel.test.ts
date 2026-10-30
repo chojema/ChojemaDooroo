@@ -213,8 +213,8 @@ describe('the author of a new memo', () => {
     expect(authorNameOf({ value: '   ', fallback: ' pc ' })).toBe('pc')
     expect(authorNameOf({ value: '', fallback: '' })).toBe(MEMO_FALLBACK_AUTHOR)
     expect(authorNameOf(null)).toBe(MEMO_FALLBACK_AUTHOR)
-    // Chojema Docs product identity is the fallback when no author is configured.
-    expect(MEMO_FALLBACK_AUTHOR).toBe('Chojema Docs')
+    // Chojema Dooroo product identity is the fallback when no author is configured.
+    expect(MEMO_FALLBACK_AUTHOR).toBe('Chojema Dooroo')
   })
 
   it('takes out separators and control characters and cuts at 64 units', () => {

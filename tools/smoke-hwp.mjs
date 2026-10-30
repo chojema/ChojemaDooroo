@@ -5,11 +5,11 @@ import { join, resolve } from 'node:path'
 import assert from 'node:assert/strict'
 import JSZip from 'jszip'
 
-const work = mkdtempSync(join(tmpdir(), 'chojema-docs-smoke-'))
-const env = { ...process.env, CHOJEMA_DOCS_USER_DATA: join(work, 'profile'), CHOJEMA_DOCS_SMOKE: '1' }
+const work = mkdtempSync(join(tmpdir(), 'chojema-dooroo-smoke-'))
+const env = { ...process.env, CHOJEMA_DOOROO_USER_DATA: join(work, 'profile'), CHOJEMA_DOOROO_SMOKE: '1' }
 delete env.ELECTRON_RUN_AS_NODE
 const app = await electron.launch({
-  ...(process.env.CHOJEMA_DOCS_EXE ? { executablePath: process.env.CHOJEMA_DOCS_EXE, args: [] } : { args: [resolve('apps/desktop')] }),
+  ...(process.env.CHOJEMA_DOOROO_EXE ? { executablePath: process.env.CHOJEMA_DOOROO_EXE, args: [] } : { args: [resolve('apps/desktop')] }),
   env, timeout: 45_000,
 })
 const errors = []
@@ -23,7 +23,7 @@ async function waitFile(path) {
 try {
   const home = await app.firstWindow()
   await home.getByRole('heading', { name: '문서에 집중하는 작업 공간' }).waitFor({ timeout: 30_000 })
-  assert.equal(await home.title(), 'Chojema Docs')
+  assert.equal(await home.title(), 'Chojema Dooroo')
   assert.equal(await home.locator('[data-action="new-docs"]').count(), 0)
   await home.screenshot({ path: join(work, 'home.png') })
   await home.locator('header [data-action="new-hwp"]').click()

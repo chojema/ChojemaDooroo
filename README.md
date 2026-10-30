@@ -1,4 +1,4 @@
-# Chojema Docs
+# Chojema Dooroo
 
 HWP와 HWPX 문서를 한 앱에서 작성하고 편집하는 데스크톱 워드 프로세서입니다.
 
@@ -14,7 +14,7 @@ HWP와 HWPX 문서를 한 앱에서 작성하고 편집하는 데스크톱 워�
 
 ## 설치
 
-[GitHub Releases](https://github.com/chojema/ChojemaDocs/releases)에서 Windows x64 설치 파일 `ChojemaDocs-Setup-<버전>-x64.exe`를 받습니다.
+[GitHub Releases](https://github.com/chojema/ChojemaDooroo/releases)에서 Windows x64 설치 파일 `ChojemaDooroo-Setup-<버전>-x64.exe`(0.1.0-beta.2까지는 `ChojemaDocs-Setup-<버전>-x64.exe`)를 받습니다.
 
 현재 버전은 시험 배포 단계입니다. 설치 파일에는 코드 서명이 없습니다. 문서 호환성을 확인할 때는 원본의 복사본을 사용하세요. 복잡한 서식과 개체가 모든 문서에서 동일하게 보존되는 것을 보증하지 않습니다.
 
@@ -25,8 +25,8 @@ macOS는 별도 요청에 따라 Mac에서 빌드하고 검증합니다. 현재 
 Node.js 24 LTS, npm 10 이상, Git이 필요합니다. 일반 앱 빌드에는 Rust가 필요하지 않습니다. 저장소에 포함된 rhwp WebAssembly를 재사용합니다.
 
 ```sh
-git clone https://github.com/chojema/ChojemaDocs.git
-cd ChojemaDocs
+git clone https://github.com/chojema/ChojemaDooroo.git
+cd ChojemaDooroo
 npm ci
 npm run dev
 ```
@@ -52,7 +52,7 @@ Windows 설치본은 시작 후와 4시간 간격으로 이 저장소의 새 버
 
 ## 라이선스와 출처
 
-Chojema Docs의 제품 개발과 유지관리는 Chojema가 담당합니다. 재사용 구성요소의 원저작권은 각 권리자에게 있습니다.
+Chojema Dooroo의 제품 개발과 유지관리는 Chojema가 담당합니다. 재사용 구성요소의 원저작권은 각 권리자에게 있습니다.
 
 [chojema/chojemaoffice](https://github.com/chojema/chojemaoffice)의 소스 중 HWP 편집기 및 공용 라이브러리를 바탕으로 만들었습니다. 해당 소스는 [IeumOffice](https://github.com/pblsketch/openoffice)와 [GenOffice](https://github.com/genspark-ai/genoffice)에 기반하며 Apache-2.0 라이선스입니다. HWP/HWPX 엔진과 편집기는 [rhwp](https://github.com/edwardkim/rhwp)의 MIT 라이선스 코드를 사용합니다.
 

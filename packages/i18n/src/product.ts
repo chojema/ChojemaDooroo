@@ -24,12 +24,12 @@ export const UPSTREAM_NAME_LITERAL = `{{${UPSTREAM_PRODUCT_NAME}}}`
  * productName, the userData folder, the default save folder), which must stay
  * the same whatever the UI language is.
  */
-// Chojema Docs product identity; upstream package identifiers remain unchanged.
-export const PRODUCT_NAME = 'Chojema Docs'
+// Chojema Dooroo product identity; upstream package identifiers remain unchanged.
+export const PRODUCT_NAME = 'Chojema Dooroo'
 
 /** Languages that show a localized product name instead of PRODUCT_NAME. */
 const LOCALIZED_PRODUCT_NAMES: Readonly<Record<string, string>> = {
-  ko: 'Chojema Docs',
+  ko: 'Chojema Dooroo',
 }
 
 /** The product name as shown in a UI language (a Lang or a raw locale tag). */
@@ -41,6 +41,7 @@ export function productName(lang: string | null | undefined): string {
 }
 
 /** Electron userData folder name of the installed app (under the per-user app-data root). */
+// Kept from the former name Chojema Docs so existing installs keep their settings.
 export const USER_DATA_DIR_NAME = 'ChojemaDocs'
 
 /** userData folder name of an unpacked (development) run, kept apart from the installed app's. */
@@ -48,12 +49,12 @@ export const DEV_USER_DATA_DIR_NAME = 'ChojemaDocs-Dev'
 
 /** The product's public GitHub repository: issues, releases and update checks all point here. */
 export const PRODUCT_REPO_OWNER = 'chojema'
-export const PRODUCT_REPO_NAME = 'ChojemaDocs'
+export const PRODUCT_REPO_NAME = 'ChojemaDooroo'
 /** `owner/repo`; the URLs built from it live in @genoffice/electron-utils (github-menu.ts) */
 export const PRODUCT_REPO_SLUG = `${PRODUCT_REPO_OWNER}/${PRODUCT_REPO_NAME}`
 
 /** The product's website: downloads, release notes and the step-by-step help pages. */
-export const PRODUCT_WEBSITE = 'https://github.com/chojema/ChojemaDocs'
+export const PRODUCT_WEBSITE = 'https://github.com/chojema/ChojemaDooroo'
 
 /** Where rights holders and users reach the maintainer about trademarks, copyright and licensing. */
 export const PRODUCT_CONTACT_EMAIL = '113392443+chojema@users.noreply.github.com'

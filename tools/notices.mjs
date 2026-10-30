@@ -22,9 +22,9 @@ function scan(dir) {
 scan('node_modules')
 for (const app of ['hwp', 'desktop']) scan(`apps/${app}/node_modules`)
 const unique = new Map(entries.map((entry) => [entry.key, entry.text]))
-let result = 'Chojema Docs — Third-Party Software Notices\n\n'
+let result = 'Chojema Dooroo — Third-Party Software Notices\n\n'
 result += readFileSync('NOTICE', 'utf8') + '\n\n'
-result += 'The following inventory conservatively includes build dependencies. Their authors are authors of the original components, not contributors to Chojema Docs.\nElectron and Chromium notices also ship in LICENSES.chromium.html.\n\n'
+result += 'The following inventory conservatively includes build dependencies. Their authors are authors of the original components, not contributors to Chojema Dooroo.\nElectron and Chromium notices also ship in LICENSES.chromium.html.\n\n'
 result += [...unique].sort(([a], [b]) => a.localeCompare(b)).map(([, text]) => text).join('\n\n' + '='.repeat(72) + '\n\n')
 for (const dir of ['vendor/rhwp-core', 'packages/ui/template-fonts']) {
   result += `\n\n${'='.repeat(72)}\n${dir}\n\n`

@@ -1,5 +1,11 @@
 # 변경 내역
 
+## 미배포
+
+- 앱 이름을 Chojema Docs에서 Chojema Dooroo로 변경. 실행 파일과 설치 파일 이름은 ChojemaDooroo로 바뀜.
+- 기존 설치본의 설정과 업데이트를 잇기 위해 appId와 사용자 데이터 폴더 이름은 유지.
+- GitHub 저장소를 chojema/ChojemaDooroo로 변경. 업데이트와 배포 주소도 새 저장소를 사용함.
+
 ## 0.1.0-beta.2
 
 - 앱 제작자 메타데이터를 구조화하여 Windows 실행 파일의 회사명에도 Chojema가 표시되도록 수정.

@@ -587,7 +587,7 @@ function registerHwpIpc(): void {
         const win =
           BrowserWindow.fromWebContents(e.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
         const copy = untitledCopyByWc.get(wcId)
-        // Chojema Docs: new documents default to HWPX; opened files keep their format.
+        // Chojema Dooroo: new documents default to HWPX; opened files keep their format.
         const fallback: HwpFormat = currentFormat ?? copy?.format ?? 'hwpx'
         const hwp = { name: tm('filterHwp'), extensions: ['hwp'] }
         const hwpx = { name: tm('filterHwpx'), extensions: ['hwpx'] }

@@ -17,7 +17,7 @@ export interface AppState {
 }
 export const CHANNEL = 'chojema:command'
 export const STATE_CHANNEL = 'chojema:state'
-export const RELEASES = 'https://github.com/chojema/ChojemaDocs/releases'
+export const RELEASES = 'https://github.com/chojema/ChojemaDooroo/releases'
 export function editorForPath(path: string): EditorKind | undefined {
   if (/\.hwpx?$/i.test(path)) return 'hwp'
   return undefined

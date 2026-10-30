@@ -1,15 +1,15 @@
 {
-  "name": "chojema-docs",
+  "name": "chojema-dooroo",
   "version": "0.1.0-beta.2",
   "private": true,
-  "description": "Chojema Docs — HWP and HWPX desktop word processor",
+  "description": "Chojema Dooroo — HWP and HWPX desktop word processor",
   "license": "Apache-2.0",
   "author": {
     "name": "Chojema"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/chojema/ChojemaDocs.git"
+    "url": "https://github.com/chojema/ChojemaDooroo.git"
   },
   "engines": {
     "node": ">=22.12.0",

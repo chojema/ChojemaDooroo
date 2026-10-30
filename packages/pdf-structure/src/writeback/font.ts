@@ -8,7 +8,7 @@
  * Only TrueType (glyf) faces are taken: PDFium embeds them as FontFile2
  * as they are, while CFF faces need a FontFile3 relabel pass afterwards.
  */
-// Chojema Docs: keep the shared font reader without shipping the PDF editor app.
+// Chojema Dooroo: keep the shared font reader without shipping the PDF editor app.
 import { fontCoversText } from './font-cmap'
 import { findFontCovering, findSystemFont, isTruetype } from '../../../font-metrics/src/font-locate'
 import type { CompiledWasmModule, HbSubsetWasm } from './types'

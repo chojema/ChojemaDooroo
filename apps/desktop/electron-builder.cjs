@@ -2,16 +2,17 @@ const { existsSync } = require('node:fs')
 const { join } = require('node:path')
 
 module.exports = {
+  // Kept from the former name Chojema Docs so updates replace existing installs.
   appId: 'io.github.chojema.docs',
-  productName: 'Chojema Docs',
+  productName: 'Chojema Dooroo',
   electronVersion: require('../../node_modules/electron/package.json').version,
   electronDist: join(__dirname, '../../node_modules/electron/dist'),
-  executableName: 'ChojemaDocs',
-  artifactName: 'ChojemaDocs-${version}-${arch}.${ext}',
+  executableName: 'ChojemaDooroo',
+  artifactName: 'ChojemaDooroo-${version}-${arch}.${ext}',
   copyright: 'Copyright © 2026 Chojema. Third-party copyrights are retained in NOTICE.',
   directories: { output: 'release', buildResources: 'build' },
   files: ['out/**', 'package.json'],
-  extraMetadata: { name: 'chojema-docs', author: { name: 'Chojema' }, contributors: ['Chojema'] },
+  extraMetadata: { name: 'chojema-dooroo', author: { name: 'Chojema' }, contributors: ['Chojema'] },
   npmRebuild: false,
   asar: true,
   extraResources: [
@@ -30,10 +31,10 @@ module.exports = {
     { ext: 'hwpx', name: 'HWPX Document', role: 'Editor' },
   ],
   win: { target: [{ target: 'nsis', arch: ['x64'] }], icon: 'build/icon.ico', signAndEditExecutable: true },
-  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, deleteAppDataOnUninstall: false, artifactName: 'ChojemaDocs-Setup-${version}-${arch}.${ext}' },
+  nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, createDesktopShortcut: true, deleteAppDataOnUninstall: false, artifactName: 'ChojemaDooroo-Setup-${version}-${arch}.${ext}' },
   mac: { target: ['dmg', 'zip'], category: 'public.app-category.productivity', identity: null },
   dmg: { sign: false },
-  publish: [{ provider: 'github', owner: 'chojema', repo: 'ChojemaDocs', releaseType: require('./package.json').version.includes('-') ? 'prerelease' : 'release' }],
+  publish: [{ provider: 'github', owner: 'chojema', repo: 'ChojemaDooroo', releaseType: require('./package.json').version.includes('-') ? 'prerelease' : 'release' }],
   beforePack: () => {
     for (const path of ['../hwp/out/renderer/studio/index.html', 'build/THIRD-PARTY-NOTICES.txt']) {
       if (!existsSync(join(__dirname, path))) throw new Error(`Required resource missing: ${path}`)

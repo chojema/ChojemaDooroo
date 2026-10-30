@@ -199,12 +199,12 @@ Contact
 Trademark and copyright reports and licensing questions: pblsketch@gmail.com
 
 
-Chojema Docs modifications
+Chojema Dooroo modifications
 
-Chojema Docs is maintained by Chojema. It is based on the HWP editor and
+Chojema Dooroo is maintained by Chojema. It is based on the HWP editor and
 shared components from chojema/chojemaoffice at commit
 9e2242fa86f55b11e66488a40d80384e10d4f2ec, which in turn derive from IeumOffice
-and GenOffice. Chojema Docs adds its own desktop host, HWPX-first defaults,
+and GenOffice. Chojema Dooroo adds its own desktop host, HWPX-first defaults,
 product identity and release tooling, and excludes the Word and other editor
 applications. Original component copyrights and license notices above remain
-in force. Chojema Docs modifications are licensed under Apache License 2.0.
+in force. Chojema Dooroo modifications are licensed under Apache License 2.0.
