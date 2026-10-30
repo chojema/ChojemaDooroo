@@ -1,4 +1,4 @@
-const { existsSync } = require('node:fs')
+const { existsSync, readdirSync, rmSync } = require('node:fs')
 const { join } = require('node:path')
 
 module.exports = {
@@ -36,6 +36,12 @@ module.exports = {
   beforePack: () => {
     for (const path of ['../hwp/out/renderer/studio/index.html', 'build/THIRD-PARTY-NOTICES.txt']) {
       if (!existsSync(join(__dirname, path))) throw new Error(`Required resource missing: ${path}`)
+    }
+    const rel = join(__dirname, 'release')
+    if (existsSync(rel)) {
+      for (const name of readdirSync(rel)) {
+        if (/\.(?:exe|blockmap|dmg|zip)$/i.test(name)) rmSync(join(rel, name), { force: true })
+      }
     }
   },
 }
