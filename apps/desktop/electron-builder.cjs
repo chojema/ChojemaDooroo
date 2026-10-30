@@ -11,7 +11,7 @@ module.exports = {
   copyright: 'Copyright © 2026 Chojema. Third-party copyrights are retained in NOTICE.',
   directories: { output: 'release', buildResources: 'build' },
   files: ['out/**', 'package.json'],
-  extraMetadata: { name: 'chojema-docs', author: 'Chojema', contributors: ['Chojema'] },
+  extraMetadata: { name: 'chojema-docs', author: { name: 'Chojema' }, contributors: ['Chojema'] },
   npmRebuild: false,
   asar: true,
   extraResources: [

@@ -44,6 +44,8 @@ jobs:
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne "v$version") { throw 'Tag and package version differ' }
+          $info = (Get-Item apps/desktop/release/win-unpacked/ChojemaDocs.exe).VersionInfo
+          if ($info.CompanyName -ne 'Chojema' -or $info.ProductName -ne 'Chojema Docs') { throw 'Incorrect Windows product attribution' }
           $files = Get-ChildItem apps/desktop/release -File | Where-Object { $_.Extension -in '.exe', '.blockmap' -or $_.Name -eq 'latest.yml' }
           $files | ForEach-Object { $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(); "$hash  $($_.Name)" } | Set-Content apps/desktop/release/SHA256SUMS.txt -Encoding utf8
       - uses: actions/upload-artifact@v4

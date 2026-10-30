@@ -16,7 +16,8 @@ for (const file of files) {
 }
 for (const path of ['package.json', 'apps/desktop/package.json']) {
   const pkg = JSON.parse(readFileSync(path, 'utf8'))
-  if (pkg.author !== 'Chojema' || (pkg.contributors && JSON.stringify(pkg.contributors) !== '["Chojema"]')) errors.push(`Invalid product authorship: ${path}`)
+  const author = typeof pkg.author === 'string' ? pkg.author : pkg.author?.name
+  if (author !== 'Chojema' || (pkg.contributors && JSON.stringify(pkg.contributors) !== '["Chojema"]')) errors.push(`Invalid product authorship: ${path}`)
 }
 if (errors.length) throw new Error(errors.join('\n'))
 console.log(`Public allowlist and credential-pattern check passed (${files.length} tracked files).`)
