@@ -231,7 +231,7 @@ async function checkUpdate() {
   try { await autoUpdater.checkForUpdates() } catch { updateMessage = '업데이트를 확인하지 못했습니다. 배포 페이지를 이용해 주세요.'; publishAll() }
 }
 async function about(host: Host) {
-  await dialog.showMessageBox(host.win, { title: 'Chojema Dooroo 정보', message: `Chojema Dooroo ${app.getVersion()}`, detail: '제작 및 유지관리: Chojema\n\nGenOffice와 IeumOffice의 공용 코드를 바탕으로 구성했습니다. HWP/HWPX 편집기는 rhwp를 사용합니다. 원저작권과 제삼자 라이선스는 LICENSE, NOTICE, THIRD-PARTY-NOTICES.txt에 보존합니다.\n\n본 제품은 한글과컴퓨터의 한글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.', buttons: ['닫기', '라이선스 폴더 열기'] }).then((result) => {
+  await dialog.showMessageBox(host.win, { title: 'Chojema Dooroo 정보', message: `Chojema Dooroo ${app.getVersion()}`, detail: 'IeumOffice의 소스 중 HWP 편집기 및 공용 라이브러리를 바탕으로 만들었습니다. 해당 소스는 GenOffice에 기반하며 Apache-2.0 라이선스입니다. HWP/HWPX 엔진과 편집기는 rhwp의 MIT 라이선스 코드를 사용합니다.\n\n원저작권과 제삼자 라이선스는 LICENSE, NOTICE, THIRD-PARTY-NOTICES.txt에 보존합니다.\n\n본 제품은 한글과컴퓨터의 한글 문서 파일(.hwp) 공개 문서를 참고하여 개발하였습니다.', buttons: ['닫기', '라이선스 폴더 열기'] }).then((result) => {
     if (result.response === 1) void shell.openPath(app.isPackaged ? process.resourcesPath : resolve(__dirname, '../../../../'))
   })
 }

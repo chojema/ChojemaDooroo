@@ -201,10 +201,10 @@ Trademark and copyright reports and licensing questions: pblsketch@gmail.com
 
 Chojema Dooroo modifications
 
-Chojema Dooroo is maintained by Chojema. It is based on the HWP editor and
-shared components from chojema/chojemaoffice at commit
-9e2242fa86f55b11e66488a40d80384e10d4f2ec, which in turn derive from IeumOffice
-and GenOffice. Chojema Dooroo adds its own desktop host, HWPX-first defaults,
-product identity and release tooling, and excludes the Word and other editor
-applications. Original component copyrights and license notices above remain
-in force. Chojema Dooroo modifications are licensed under Apache License 2.0.
+Chojema Dooroo is based on the HWP editor and shared components from
+IeumOffice (https://github.com/pblsketch/openoffice), which in turn derive
+from GenOffice (https://github.com/genspark-ai/genoffice). Chojema Dooroo adds
+its own desktop host, HWPX-first defaults, and release tooling, and includes
+only the HWP/HWPX editor application. Original component copyrights and
+license notices above remain in force. Chojema Dooroo modifications are
+licensed under the Apache License, Version 2.0.

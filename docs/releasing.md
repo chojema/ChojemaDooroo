@@ -1,50 +1,35 @@
 # 배포 절차
 
-제품 제작자와 유지관리자는 Chojema입니다. 커밋 작성자, 제품 메타데이터, 소개 문구에 도구를 공동 작성자로 추가하지 않습니다. 원저작권과 필수 제삼자 고지는 이 원칙과 별도로 유지합니다.
-
 ## 버전
 
-- `0.1.0-beta.1`: 최초 기능 검증 배포.
-- `0.1.0-beta.2`: 같은 기능 범위의 후속 시험 배포.
-- `0.1.0-rc.1`: 정식 배포 후보.
-- `0.1.0`: 기본 동작과 배포 절차 검증 후 첫 정식 배포.
-- `0.1.1`: 호환성을 유지하는 오류 수정.
-- `0.2.0`: 호환성을 유지하는 기능 추가. 0.x에서도 파일 형식과 데이터 경로 변경은 변경 내역에 명시.
-- `1.0.0`: 핵심 기능과 문서 호환성 기준이 충분히 안정화된 제품.
-
-버전은 루트 `package.json`과 `apps/desktop/package.json`에서 일치해야 합니다. 공용 라이브러리의 내부 버전은 제품 버전과 독립적입니다.
+버전은 루트 `package.json`과 `apps/desktop/package.json`에서 일치해야 합니다.
 
 ```sh
-npm run version:set -- 0.1.0-beta.2
+npm run version:set -- 0.1.0-beta.3
 ```
 
 ## 배포 전 검증
 
-1. CHANGELOG.md와 `docs/releases/<버전>.md`를 갱신합니다.
+1. `CHANGELOG.md`와 `docs/releases/<버전>.md`를 갱신합니다.
 2. `npm ci`, `npm run typecheck`, `npm test`를 실행합니다.
-3. `npm run build`, `npm run test:smoke`로 실제 편집 화면, 저장, 창 이동을 확인합니다.
-4. 실제 문서의 복사본으로 표, 그림, 쪽 나눔, 메모가 필요한 수준으로 보존되는지 점검합니다.
-5. `npm run dist:win`으로 Windows 설치본을 만듭니다.
-6. `npm run check:public`과 자격 증명 검사를 통과시킵니다. `.mesh`, `.work`, 사용자 문서, 인증 정보, 개인 설정은 공개하지 않습니다.
-7. 제품 변경을 Chojema 단독 작성 커밋으로 저장하고 태그를 올립니다.
+3. `npm run build`, `npm run test:smoke`로 편집 화면, 저장, 창 분리를 확인합니다.
+4. `npm run dist:win`으로 Windows 설치본을 생성합니다.
+5. `npm run check:public`을 실행합니다.
+6. 변경 사항을 커밋하고 버전 태그를 push합니다.
 
 ```sh
-git tag v0.1.0-beta.2
+git tag v0.1.0-beta.3
 git push origin main
-git push origin v0.1.0-beta.2
+git push origin v0.1.0-beta.3
 ```
 
-Windows 배포 워크플로는 태그와 제품 버전의 일치를 확인하고, 검사와 빌드 후 설치 파일, 업데이트 정보, SHA-256 검사값을 GitHub Releases에 최신 릴리스(`--latest`)로 올립니다. 배포 권한은 해당 작업에만 부여합니다. 앱은 다른 프로젝트의 업데이트를 받지 않습니다.
+Windows 배포 워크플로는 태그와 제품 버전의 일치를 확인하고, 검사와 빌드 후 설치 파일, 업데이트 정보, SHA-256 체크섬을 GitHub Releases에 게시합니다.
 
-자동 업데이트의 전체 경로는 후속 버전이 공개된 뒤 설치본에서 추가 검증해야 합니다. 첫 배포만으로 이 경로의 검증이 끝나는 것은 아닙니다.
+## macOS
 
-## Mac
-
-Mac 배포는 별도 요청 시 Mac에서 수행합니다. macOS 자동 빌드나 자동 게시 작업은 등록하지 않습니다.
+macOS 빌드는 Mac 환경에서 수행합니다.
 
 ```sh
 npm ci
 npm run dist:mac
 ```
-
-Apple Silicon과 Intel 대상은 해당 Mac에서 확인합니다. 코드 서명, 공증과 실제 문서 호환성은 별도 검증 후 배포 내역에 적습니다.

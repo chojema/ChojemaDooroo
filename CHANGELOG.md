@@ -2,21 +2,18 @@
 
 ## 0.1.0-beta.3
 
-- 앱 이름을 Chojema Docs에서 Chojema Dooroo로 변경. 실행 파일과 설치 파일 이름은 ChojemaDooroo로 바뀜.
-- 기존 설치본의 설정과 업데이트를 잇기 위해 appId와 사용자 데이터 폴더 이름은 유지.
-- GitHub 저장소를 chojema/ChojemaDooroo로 변경. 업데이트와 배포 주소도 새 저장소를 사용함.
+- 앱 이름을 Chojema Docs에서 Chojema Dooroo로 변경하고 실행 파일과 설치 파일 이름을 `ChojemaDooroo`로 전환.
+- 기존 설치본의 설정과 업데이트를 잇기 위해 `appId`와 사용자 데이터 폴더 이름은 유지.
+- GitHub 저장소와 업데이트·배포 주소를 `chojema/ChojemaDooroo`로 변경.
 
 ## 0.1.0-beta.2
 
-- 앱 제작자 메타데이터를 구조화하여 Windows 실행 파일의 회사명에도 Chojema가 표시되도록 수정.
-- 배포 전에 Windows 제품명과 회사명을 자동 검사.
-- 첫 공개 설치 파일 배포. beta.1은 소스 및 내부 배포 검증 단계로 유지.
+- Windows 실행 파일 메타데이터(제품명 및 회사명) 보완 및 자동 검증 추가.
+- 첫 공개 Windows x64 설치 파일 배포.
 
 ## 0.1.0-beta.1
 
-- HWP/HWPX 전용 편집기를 Chojema Docs로 구성.
+- HWP/HWPX 전용 데스크톱 편집기 구성.
 - 문서 탭, 나란히 보기, 별도 창으로 이동 제공.
 - 새 한글 문서의 기본 형식을 HWPX로 설정.
-- 단독 제작자 표시, 전용 데이터 경로와 GitHub 업데이트 경로 구성.
-- Windows 시험 배포와 버전별 반복 빌드 절차 마련.
-- macOS는 이후 Mac에서 별도 빌드와 검증 예정.
+- 전용 데이터 경로와 GitHub 자동 업데이트 경로 구성.
