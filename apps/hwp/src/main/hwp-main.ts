@@ -23,7 +23,13 @@ import { getUiLang } from '@genoffice/i18n'
 import { registerHwpAttachmentIpc } from './attachments-ipc'
 import { registerHwpImageIpc } from './ai-image'
 import { atomicWriteFile } from './atomic-write'
-import { badJob, printJobToPdf, printJobToPrinter } from './print-document'
+import {
+  badJob,
+  pagePicturePaths,
+  printJobToImages,
+  printJobToPdf,
+  printJobToPrinter,
+} from './print-document'
 import { tm } from './dialog-strings'
 import { fieldKindsOf } from './field-kinds'
 import type { FieldKinds } from './field-kinds'
@@ -47,13 +53,14 @@ import { sectionTailsOf } from './section-tails'
 import type { SectionTails } from './section-tails'
 import { newTabsOf } from './tab-widths'
 import { hasTrackedChanges, withoutTrackedChanges } from './tracked-changes'
-import { APP_COMMANDS, HWP_CHANNELS, MAX_HWP_SAVE_BYTES, hwpFormatOfPath } from '../shared/ipc'
+import { APP_COMMANDS, HWP_CHANNELS, IMAGE_FORMATS, MAX_HWP_SAVE_BYTES, hwpFormatOfPath } from '../shared/ipc'
 import type {
   AppCommand,
   AppMenuItem,
   BeginSaveResult,
   CommitSaveResult,
   HwpFormat,
+  ImageFormat,
   MeasuredTab,
   MemoPathStep,
   MemoSnapshot,
@@ -294,11 +301,19 @@ export function requestHwpPrint(contents: WebContents, mode: PrintMode): void {
 const printWindow = (): BrowserWindow =>
   new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } })
 
-/** The name an exported PDF is offered under: the document's, or the untitled one. */
-function pdfName(wcId: number): string {
+/** A hidden window that draws a page for a picture: offscreen, so any size can be captured. */
+const imageWindow = (): BrowserWindow =>
+  new BrowserWindow({
+    show: false,
+    useContentSize: true,
+    webPreferences: { sandbox: true, javascript: false, offscreen: true },
+  })
+
+/** The name an export is offered under: the document's, or the untitled one. */
+function exportName(wcId: number, extension: string): string {
   const current = savePathByWc.get(wcId)
   const base = current ? basename(current).replace(/.hwpx?$/i, '') : ''
-  return `${base || tm('untitledFile')}.pdf`
+  return `${base || tm('untitledFile')}.${extension}`
 }
 
 export function requestHwpSave(contents: WebContents, mode: SaveMode): Promise<boolean> {
@@ -544,12 +559,29 @@ function registerHwpIpc(): void {
       const win =
         BrowserWindow.fromWebContents(e.sender) ?? BrowserWindow.getFocusedWindow() ?? undefined
       const current = savePathByWc.get(wcId)
+      const folder = current ? dirname(current) : configuredDefaultSaveDir(app)
+      if (printJob.mode === 'png' || printJob.mode === 'jpg') {
+        const format = printJob.mode
+        const picked = await showSaveDialogWithMemory(dialog, win, {
+          title: tm('dlgExportImageTitle'),
+          defaultPath: join(folder, exportName(wcId, format)),
+          filters: [
+            format === 'png'
+              ? { name: 'PNG', extensions: ['png'] }
+              : { name: 'JPEG', extensions: ['jpg', 'jpeg'] },
+          ],
+        })
+        if (picked.canceled || !picked.filePath) return { ok: true, canceled: true }
+        const paths = pagePicturePaths(picked.filePath, format, printJob.pages.length)
+        await printJobToImages(printJob, format, imageWindow, (index, bytes) =>
+          atomicWriteFile(paths[index]!, bytes),
+        )
+        shell.showItemInFolder(paths[0]!)
+        return { ok: true, path: paths[0]!, paths }
+      }
       const picked = await showSaveDialogWithMemory(dialog, win, {
         title: tm('dlgExportPdfTitle'),
-        defaultPath: join(
-          current ? dirname(current) : configuredDefaultSaveDir(app),
-          pdfName(wcId),
-        ),
+        defaultPath: join(folder, exportName(wcId, 'pdf')),
         filters: [{ name: 'PDF', extensions: ['pdf'] }],
       })
       if (picked.canceled || !picked.filePath) return { ok: true, canceled: true }
@@ -753,7 +785,9 @@ function registerHwpIpc(): void {
   // the editor's File menu: the same requests as Ctrl+S and Ctrl+P, so one path saves
   ipcMain.on(HWP_CHANNELS.fileCommand, (e, command: unknown) => {
     if (command === 'save' || command === 'saveAs') void requestHwpSave(e.sender, command)
-    else if (command === 'pdf' || command === 'print') requestHwpPrint(e.sender, command)
+    else if (command === 'pdf' || command === 'print' || IMAGE_FORMATS.includes(command as ImageFormat)) {
+      requestHwpPrint(e.sender, command as PrintMode)
+    }
     else if ((APP_COMMANDS as readonly unknown[]).includes(command)) runtime.appCommand?.(e.sender, command as AppCommand)
   })
 

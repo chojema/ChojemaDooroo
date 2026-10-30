@@ -79,6 +79,34 @@ try {
   const filters = await app.evaluate(() => globalThis.__chojemaSaveFilters)
   assert.deepEqual(filters[0].extensions, ['hwpx'])
   await home.getByRole('tab', { name: /smoke.hwpx/ }).waitFor()
+  // A second page, then each page as a picture and the document as a PDF that is
+  // brought back in later.
+  await paper.click({ position: { x: 140, y: 150 } })
+  await hwp.keyboard.press('End')
+  await hwp.keyboard.press('Control+Enter')
+  await hwp.keyboard.type('Second page')
+  await app.evaluate(({ shell }) => { shell.showItemInFolder = () => {} })
+  const pagePng = join(work, 'pages-01.png')
+  const pageJpg = join(work, 'pages-02.jpg')
+  const exportedPdf = join(work, 'smoke-pdf.pdf')
+  // each export is waited for to its last file: one asked for while another runs is ignored
+  for (const [command, picked, path] of [['png', 'pages.png', join(work, 'pages-02.png')], ['jpg', 'pages.jpg', pageJpg], ['pdf', 'smoke-pdf.pdf', exportedPdf]]) {
+    await app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }) }, join(work, picked))
+    await hwp.evaluate((command) => window.hwpApi.requestFileCommand(command), command)
+    await waitFile(path)
+  }
+  assert.ok(existsSync(pagePng) && existsSync(join(work, 'pages-01.jpg')), 'One picture file for each page')
+  assert.deepEqual([...readFileSync(pagePng).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47])
+  assert.deepEqual([...readFileSync(pageJpg).subarray(0, 2)], [0xff, 0xd8])
+  const picture = await app.evaluate(({ nativeImage }, path) => {
+    const image = nativeImage.createFromPath(path)
+    const bitmap = image.toBitmap()
+    let ink = 0
+    for (let i = 0; i < bitmap.length; i += 4) if (bitmap[i] < 128 && bitmap[i + 1] < 128 && bitmap[i + 2] < 128) ink++
+    return { ...image.getSize(), ink }
+  }, pagePng)
+  assert.ok(picture.width > 1500 && picture.height > 2100, `A4 page drawn at twice its size: ${JSON.stringify(picture)}`)
+  assert.ok(picture.ink > 200, `The typed text is drawn on the page picture: ${JSON.stringify(picture)}`)
   // the app has no toolbar or window menu: its commands come from the editor's menus
   await hwp.evaluate(() => window.hwpApi.requestFileCommand('new'))
   for (let i = 0; i < 120; i++) {
@@ -142,8 +170,34 @@ try {
   assert.equal(await restarted.getByLabel('인터페이스 용어').inputValue(), 'hwp')
   await restarted.getByLabel('인터페이스 용어').selectOption('word')
   await restarted.screenshot({ path: join(work, 'terminology-settings.png') })
+  // The exported PDF comes back in as a new, untitled HWPX document holding its text.
+  await restarted.evaluate((path) => window.chojema.command('open-path', path), exportedPdf)
+  await restarted.getByRole('tab', { name: /smoke-pdf\.hwpx/ }).waitFor({ timeout: 30_000 })
+  let imported
+  for (let i = 0; i < 120 && !imported; i++) {
+    const editors = app.context().pages().filter((p) => p.url().includes('://hwp'))
+    if (editors.length >= 2) imported = editors[editors.length - 1]
+    else await pause(250)
+  }
+  assert.ok(imported, 'The PDF opens in an editor of its own')
+  await imported.frameLocator('iframe').first().locator('canvas').first().waitFor({ timeout: 60_000 })
+  const importedHwpx = join(work, 'imported.hwpx')
+  await app.evaluate(({ dialog }, path) => {
+    dialog.showSaveDialog = async (_window, options) => {
+      globalThis.__chojemaImportDefault = options?.defaultPath
+      return { canceled: false, filePath: path }
+    }
+  }, importedHwpx)
+  for (let i = 0; i < 40 && !existsSync(importedHwpx); i++) {
+    await imported.evaluate(() => window.hwpApi.requestFileCommand('save'))
+    await pause(500)
+  }
+  const importedZip = await JSZip.loadAsync(await waitFile(importedHwpx))
+  const importedXml = (await Promise.all(Object.keys(importedZip.files).filter((p) => /section\d+\.xml$/.test(p)).map((p) => importedZip.file(p).async('string')))).join('\n')
+  assert.match(importedXml, /Chojema HWP smoke test/, 'The text of a PDF comes in as document text')
+  assert.match(await app.evaluate(() => globalThis.__chojemaImportDefault ?? ''), /smoke-pdf\.hwpx$/, 'A brought-in PDF saves as a new document under its own name')
   assert.deepEqual(errors, [], 'No app or optional-bridge handler errors')
-  const result = { passed: true, hwpx, hwpFile, roundtrip, editorProcessesPreserved: true, screenshots: work, errors, platformWarnings }
+  const result = { passed: true, hwpx, hwpFile, roundtrip, pagePng, pageJpg, importedHwpx, editorProcessesPreserved: true, screenshots: work, errors, platformWarnings }
   writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2))
   console.log(JSON.stringify(result, null, 2))
 } catch (error) {

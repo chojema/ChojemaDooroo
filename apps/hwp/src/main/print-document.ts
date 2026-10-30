@@ -1,14 +1,15 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { BrowserWindow } from 'electron'
-import { MAX_PRINT_CHARS, MAX_PRINT_PAGES } from '../shared/ipc'
-import type { PrintJob, PrintPage } from '../shared/ipc'
+import type { BrowserWindow, NativeImage } from 'electron'
+import { IMAGE_FORMATS, MAX_PRINT_CHARS, MAX_PRINT_PAGES } from '../shared/ipc'
+import type { ImageFormat, PrintJob, PrintPage } from '../shared/ipc'
 
 /**
  * Printing a document: the pages as the editor draws them for print (SVG), one after
  * another in one HTML page sized page by page, which a hidden window with scripts off
- * turns into a PDF or hands to the system print dialog.
+ * turns into a PDF or hands to the system print dialog. Exported as pictures, each page
+ * is drawn alone in an offscreen window and captured.
  */
 
 /** Paper sides in mm: ISO A3–A5, JIS B4–B5, US Letter, Legal and Tabloid. */
@@ -62,7 +63,9 @@ export function imageFile(dataUrl: string, index: number): { name: string; bytes
 export function badJob(job: unknown): string | null {
   if (!job || typeof job !== 'object') return 'not a print job'
   const { mode, pages, images } = job as Partial<PrintJob>
-  if (mode !== 'pdf' && mode !== 'print') return 'unknown print mode'
+  if (mode !== 'pdf' && mode !== 'print' && !IMAGE_FORMATS.includes(mode as ImageFormat)) {
+    return 'unknown print mode'
+  }
   if (!Array.isArray(pages) || pages.length === 0) return 'no pages'
   if (pages.length > MAX_PRINT_PAGES) return 'too many pages'
   if (!Array.isArray(images) || images.some((image) => typeof image !== 'string')) {
@@ -89,6 +92,14 @@ const PRINT_CSP =
 
 const mm = (value: number) => `${value}mm`
 
+/** The page's SVG with its pictures pointing at `picture(i)`, and ids of its own. */
+function pageSvg(page: PrintPage, index: number, picture: (index: number) => string): string {
+  return ownIds(page.svg, `p${index}-`).replace(
+    /\bhref="ieum-image:(\d+)"/g,
+    (_, n: string) => `href="${picture(Number(n))}"`,
+  )
+}
+
 /**
  * The HTML of the pages: each page on a paper of its own size with no margin, the page's
  * pictures pointing at `picture(i)` (a file name next to the HTML, or the data URL).
@@ -101,11 +112,7 @@ export function printableHtml(pages: PrintPage[], picture: (index: number) => st
     const height = mm(sideMm(page.height))
     rules.push(`@page p${index} { size: ${width} ${height}; margin: 0; }`)
     rules.push(`.p${index} { page: p${index}; width: ${width}; height: ${height}; }`)
-    const svg = ownIds(page.svg, `p${index}-`).replace(
-      /\bhref="ieum-image:(\d+)"/g,
-      (_, n: string) => `href="${picture(Number(n))}"`,
-    )
-    body.push(`<div class="page p${index}">${svg}</div>`)
+    body.push(`<div class="page p${index}">${pageSvg(page, index, picture)}</div>`)
   })
   return [
     '<!DOCTYPE html>',
@@ -128,22 +135,90 @@ export function printableHtml(pages: PrintPage[], picture: (index: number) => st
   ].join('\n')
 }
 
+/** CSS pixels of an exported picture for each CSS pixel of the page: 192 dpi. */
+export const IMAGE_SCALE = 2
+const JPEG_QUALITY = 90
+
+/** The HTML of one page as a picture: the page fills the window, on white. */
+export function pageImageHtml(page: PrintPage, picture: (index: number) => string): string {
+  return [
+    '<!DOCTYPE html>',
+    '<html>',
+    '<head>',
+    '<meta charset="utf-8">',
+    `<meta http-equiv="Content-Security-Policy" content="${PRINT_CSP}">`,
+    '<style>',
+    '* { margin: 0; padding: 0; }',
+    'html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }',
+    'svg { display: block; width: 100%; height: 100%; }',
+    '</style>',
+    '</head>',
+    `<body>${pageSvg(page, 0, picture)}</body>`,
+    '</html>',
+  ].join('\n')
+}
+
+/**
+ * The files the pages of a picture export are written to, from the name the user picked:
+ * that name for a single page, otherwise numbered from 1 (`report-01.png`…), zero-padded
+ * so the files sort in page order.
+ */
+export function pagePicturePaths(picked: string, format: ImageFormat, count: number): string[] {
+  const base = picked.replace(/\.(png|jpe?g)$/i, '')
+  if (count === 1) return [`${base}.${format}`]
+  const digits = Math.max(2, String(count).length)
+  return Array.from(
+    { length: count },
+    (_, index) => `${base}-${String(index + 1).padStart(digits, '0')}.${format}`,
+  )
+}
+
 export type PrintWindow = Pick<BrowserWindow, 'loadFile' | 'destroy'> & {
   webContents: Pick<BrowserWindow['webContents'], 'printToPDF' | 'print'>
 }
 
+export type ImageWindow = Pick<BrowserWindow, 'loadFile' | 'destroy' | 'setContentSize'> & {
+  webContents: Pick<BrowserWindow['webContents'], 'on' | 'off' | 'invalidate'>
+}
+
+/** How long a page may take to be drawn before the export gives up on it. */
+const FRAME_TIMEOUT_MS = 10_000
+const FRAME_POLL_MS = 30
+
 /**
- * Put the job in a folder of its own (the HTML and its pictures), load it in the window
- * `createWindow` makes (hidden, scripts off) and run `use` on it. The window and the
- * folder are gone afterwards, whatever happened.
+ * A frame of the offscreen window's page at this size, drawn after the page loaded, or
+ * null when none comes. A hidden window paints only when asked (invalidate), and
+ * capturePage on one never settles once it has loaded a second page, so the frames are
+ * taken from its 'paint' events.
  */
-async function withPrintWindow<T>(
+async function drawnFrame(win: ImageWindow, width: number, height: number): Promise<NativeImage | null> {
+  const frame: { image: NativeImage | null } = { image: null }
+  const onPaint = (_event: unknown, _dirty: unknown, image: NativeImage) => {
+    if (!image.isEmpty()) frame.image = image
+  }
+  win.webContents.on('paint', onPaint)
+  try {
+    for (let waited = 0; waited < FRAME_TIMEOUT_MS; waited += FRAME_POLL_MS) {
+      win.webContents.invalidate()
+      await new Promise((resolve) => setTimeout(resolve, FRAME_POLL_MS))
+      const size = frame.image?.getSize()
+      if (size && size.width === width && size.height === height) return frame.image
+    }
+    return null
+  } finally {
+    win.webContents.off('paint', onPaint)
+  }
+}
+
+/**
+ * Put the job's pictures in a folder of its own and run `use` with the folder and what a
+ * page's picture `i` points at there. The folder is gone afterwards, whatever happened.
+ */
+async function withJobFolder<T>(
   job: PrintJob,
-  createWindow: () => PrintWindow,
-  use: (win: PrintWindow) => Promise<T>,
+  use: (dir: string, picture: (index: number) => string) => Promise<T>,
 ): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), 'ieum-hwp-print-'))
-  let win: PrintWindow | undefined
   try {
     const names = await Promise.all(
       job.images.map(async (dataUrl, index) => {
@@ -153,19 +228,64 @@ async function withPrintWindow<T>(
         return file.name
       }),
     )
-    const htmlPath = join(dir, 'print.html')
-    await writeFile(
-      htmlPath,
-      printableHtml(job.pages, (index) => names[index] ?? ''),
-      'utf8',
-    )
-    win = createWindow()
-    await win.loadFile(htmlPath)
-    return await use(win)
+    return await use(dir, (index) => names[index] ?? '')
   } finally {
-    win?.destroy()
     await rm(dir, { recursive: true, force: true })
   }
+}
+
+/**
+ * Put the job in a folder of its own (the HTML and its pictures), load it in the window
+ * `createWindow` makes (hidden, scripts off) and run `use` on it. The window and the
+ * folder are gone afterwards, whatever happened.
+ */
+function withPrintWindow<T>(
+  job: PrintJob,
+  createWindow: () => PrintWindow,
+  use: (win: PrintWindow) => Promise<T>,
+): Promise<T> {
+  return withJobFolder(job, async (dir, picture) => {
+    const htmlPath = join(dir, 'print.html')
+    await writeFile(htmlPath, printableHtml(job.pages, picture), 'utf8')
+    const win = createWindow()
+    try {
+      await win.loadFile(htmlPath)
+      return await use(win)
+    } finally {
+      win.destroy()
+    }
+  })
+}
+
+/**
+ * Each page as a picture file: drawn alone at IMAGE_SCALE in the offscreen window
+ * `createWindow` makes (scripts off), taken from its frames, and handed to `save` with its
+ * index as PNG or JPEG bytes. Pages go one at a time, so a long document is never held whole.
+ */
+export function printJobToImages(
+  job: PrintJob,
+  format: ImageFormat,
+  createWindow: () => ImageWindow,
+  save: (index: number, bytes: Buffer) => Promise<void>,
+): Promise<void> {
+  return withJobFolder(job, async (dir, picture) => {
+    const win = createWindow()
+    try {
+      for (const [index, page] of job.pages.entries()) {
+        const width = Math.max(1, Math.round(page.width * IMAGE_SCALE))
+        const height = Math.max(1, Math.round(page.height * IMAGE_SCALE))
+        win.setContentSize(width, height)
+        const htmlPath = join(dir, `page-${index}.html`)
+        await writeFile(htmlPath, pageImageHtml(page, picture), 'utf8')
+        await win.loadFile(htmlPath)
+        const image = await drawnFrame(win, width, height)
+        if (!image) throw new Error(`page ${index + 1} could not be drawn`)
+        await save(index, format === 'png' ? image.toPNG() : image.toJPEG(JPEG_QUALITY))
+      }
+    } finally {
+      win.destroy()
+    }
+  })
 }
 
 /** The pages as PDF bytes, each page on its own paper. */

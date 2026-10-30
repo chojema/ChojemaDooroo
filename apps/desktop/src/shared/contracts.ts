@@ -23,6 +23,14 @@ export function editorForPath(path: string): EditorKind | undefined {
   if (/\.hwpx?$/i.test(path)) return 'hwp'
   return undefined
 }
+/** A PDF opens as a new HWPX document made from its text, not as itself. */
+export function isPdfPath(path: string): boolean {
+  return /\.pdf$/i.test(path)
+}
+/** What the app opens: an HWP document, or a PDF to bring in. */
+export function isOpenablePath(path: string): boolean {
+  return Boolean(editorForPath(path)) || isPdfPath(path)
+}
 export function paneBounds(width: number, height: number, split: boolean) {
   const top = 36
   const available = Math.max(0, height - top)

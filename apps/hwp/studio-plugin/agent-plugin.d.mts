@@ -479,7 +479,7 @@ export type AgentDeleteTableResult =
   | { ok: false; reason: 'has_objects'; count: number }
 
 /** What a File menu item of the editor asks the app to do. */
-export type AgentFileCommand = 'save' | 'saveAs' | 'pdf' | 'print'
+export type AgentFileCommand = 'save' | 'saveAs' | 'pdf' | 'png' | 'jpg' | 'print'
 
 /** One of the app's commands put into an editor menu by installAppMenu. */
 export interface AgentAppMenuItem {

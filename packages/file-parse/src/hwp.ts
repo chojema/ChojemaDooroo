@@ -35,6 +35,9 @@ function rhwpWasmPath(): string {
 
 let engine: Promise<Engine> | null = null
 
+/** The rhwp engine, loaded once and shared by whatever in this process reads or writes HWP. */
+export { loadEngine as loadRhwpEngine }
+
 function loadEngine(): Promise<Engine> {
   if (!engine) {
     const loading = (async () => {

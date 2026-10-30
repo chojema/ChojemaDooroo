@@ -37,8 +37,8 @@ import { runSave, type SaveEditorPort } from './save-flow'
 import { AUTOSAVE_IDLE_MS, startAutosave } from './autosave-flow'
 import { PASSWORD_FLAG } from '../../scripts/rhwp-patches.mjs'
 import { STUDIO_SETTINGS_KEY, seededStudioSettings, studioUrl } from './studio-settings'
-import { APP_COMMANDS, hwpFormatOfPath } from '../shared/ipc'
-import type { HwpFormat, SaveMode, UiTheme } from '../shared/ipc'
+import { APP_COMMANDS, IMAGE_FORMATS, hwpFormatOfPath } from '../shared/ipc'
+import type { FileCommand, HwpFormat, SaveMode, UiTheme } from '../shared/ipc'
 
 /**
  * booting: the editor itself is starting. loading: the editor is up and working
@@ -151,6 +151,8 @@ export default function App() {
   const [filePath, setFilePath] = useState<string | null>(null)
   /** an untitled copy's name (a skill template's): the title it has until its first save */
   const copyNameRef = useRef<string | null>(null)
+  /** an untitled copy not saved yet: a plain Save asks where even with no edits */
+  const unsavedCopyRef = useRef(false)
   /** crash-recovery copies of the document (recovery-flow.ts), once it is in the editor */
   const copierRef = useRef<RecoveryCopier | null>(null)
   /** the editor holds a restored recovery copy that has not been saved since */
@@ -218,6 +220,7 @@ export default function App() {
         if (copy) {
           formatRef.current = copy.format
           copyNameRef.current = copy.name
+          unsavedCopyRef.current = true
         } else setFilePath(path)
         const bytes = await window.hwpApi.readFile(path)
         await editor.loadFile(bytes, copy ? copy.name : fileNameOf(path), {
@@ -369,6 +372,7 @@ export default function App() {
         const outcome = await runSave(savePortOf(editor), window.hwpApi, mode, automatic)
         if (outcome.kind === 'saved') {
           restoredRef.current = false
+          unsavedCopyRef.current = false
           copierRef.current?.saved()
           setFilePath(outcome.path)
           const backup = outcome.backupPath ? { name: fileNameOf(outcome.backupPath) } : null
@@ -436,6 +440,8 @@ export default function App() {
         save: t('fileSave'),
         saveAs: t('fileSaveAs'),
         pdf: t('fileExportPdf'),
+        png: t('fileExportPng'),
+        jpg: t('fileExportJpg'),
         print: t('filePrint'),
       })
       .catch(() => {})
@@ -446,8 +452,14 @@ export default function App() {
       .catch(() => {})
     const onCommand = (event: Event) => {
       const command = (event as CustomEvent<unknown>).detail
-      if (command === 'save' || command === 'saveAs' || command === 'pdf' || command === 'print') {
-        window.hwpApi.requestFileCommand(command)
+      if (
+        command === 'save' ||
+        command === 'saveAs' ||
+        command === 'pdf' ||
+        command === 'print' ||
+        (IMAGE_FORMATS as readonly unknown[]).includes(command)
+      ) {
+        window.hwpApi.requestFileCommand(command as FileCommand)
       } else if ((APP_COMMANDS as readonly unknown[]).includes(command)) {
         window.hwpApi.requestFileCommand(command as (typeof APP_COMMANDS)[number])
       }
@@ -547,10 +559,12 @@ export default function App() {
         return
       }
       void (async () => {
-        // a plain Save with nothing to write does nothing; ask the editor now
-        // rather than trust the polled flag, which may not have seen the last key
+        // a plain Save with nothing to write does nothing (an untitled copy has no file
+        // yet, so it always has something to write); ask the editor now rather than trust
+        // the polled flag, which may not have seen the last key
         const dirty =
           mode === 'saveAs' ||
+          unsavedCopyRef.current ||
           (await editorRef.current?.commands
             .context()
             .then((context) => context.isDirty !== false || restoredRef.current)
@@ -588,8 +602,8 @@ export default function App() {
     }
   }, [phase, save, showMemoBlocked])
 
-  // PDF and print asked for by the menu and Ctrl+P: the pages are gathered here, and the
-  // main process makes the PDF or opens the print dialog
+  // PDF, page pictures and print asked for by the menu and Ctrl+P: the pages are gathered
+  // here, and the main process makes the files or opens the print dialog
   const printingRef = useRef(false)
   useEffect(
     () =>
@@ -597,7 +611,8 @@ export default function App() {
         if (phase !== 'ready' || printingRef.current) return
         printingRef.current = true
         void (async () => {
-          const failed = mode === 'pdf' ? 'pdfFailed' : 'printFailed'
+          const failed =
+            mode === 'pdf' ? 'pdfFailed' : mode === 'print' ? 'printFailed' : 'imageFailed'
           try {
             const job = await gatherPrintJob(agentBridge, mode, (done, total) =>
               setNotice({

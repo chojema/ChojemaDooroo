@@ -6,10 +6,21 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import init, { HwpDocument } from '@rhwp/core'
 import { agentPlugin, type AgentPluginHost } from '../studio-plugin/agent-plugin.mjs'
-import { badJob, imageFile, ownIds, printableHtml, sideMm } from '../src/main/print-document'
+import {
+  IMAGE_SCALE,
+  badJob,
+  imageFile,
+  ownIds,
+  pageImageHtml,
+  pagePicturePaths,
+  printJobToImages,
+  printableHtml,
+  sideMm,
+  type ImageWindow,
+} from '../src/main/print-document'
 import { gatherPrintJob, sharePictures } from '../src/renderer/print-flow'
 import type { AgentBridge } from '../src/renderer/ai/agent-bridge'
 
@@ -180,11 +191,138 @@ describe('the printable HTML', () => {
   it('refuses jobs that are not pages', () => {
     const page = { svg: '<svg/>', width: 10, height: 10 }
     expect(badJob({ mode: 'pdf', pages: [page], images: [] })).toBeNull()
+    expect(badJob({ mode: 'png', pages: [page], images: [] })).toBeNull()
+    expect(badJob({ mode: 'jpg', pages: [page], images: [] })).toBeNull()
     expect(badJob({ mode: 'fax', pages: [page], images: [] })).toMatch(/mode/)
     expect(badJob({ mode: 'pdf', pages: [], images: [] })).toMatch(/no pages/)
     expect(badJob({ mode: 'pdf', pages: [{ ...page, svg: '<html>' }], images: [] })).toMatch(/page/)
     expect(badJob({ mode: 'pdf', pages: [{ ...page, width: -1 }], images: [] })).toMatch(/size/)
     expect(badJob({ mode: 'pdf', pages: [page], images: [3] })).toMatch(/pictures/)
     expect(badJob(null)).toMatch(/not a print job/)
+  })
+})
+
+describe('the pages as pictures', () => {
+  it('names one file for a single page and numbered files in page order for more', () => {
+    expect(pagePicturePaths('/docs/report.png', 'png', 1)).toEqual(['/docs/report.png'])
+    expect(pagePicturePaths('/docs/report', 'jpg', 1)).toEqual(['/docs/report.jpg'])
+    expect(pagePicturePaths('/docs/report.jpeg', 'jpg', 3)).toEqual([
+      '/docs/report-01.jpg',
+      '/docs/report-02.jpg',
+      '/docs/report-03.jpg',
+    ])
+    const many = pagePicturePaths('/docs/a.png', 'png', 120)
+    expect(many[0]).toBe('/docs/a-001.png')
+    expect(many[119]).toBe('/docs/a-120.png')
+  })
+
+  it('draws one page filling the window on white, with nothing that runs', () => {
+    const html = pageImageHtml(
+      { svg: '<svg id="a"><image href="ieum-image:2"/></svg>', width: 10, height: 10 },
+      (index) => `image-${index}.png`,
+    )
+    expect(html).toContain('<body><svg id="p0-a"><image href="image-2.png"/></svg></body>')
+    expect(html).toContain('background: #fff')
+    expect(html).toContain("default-src 'none'")
+    expect(html).not.toContain('<script')
+  })
+
+  /**
+   * An offscreen window: each invalidate paints a frame of the current size (none at all
+   * when `paints` is false), and the frames before a load are an empty one.
+   */
+  function offscreen(paints = true) {
+    const sizes: number[][] = []
+    const loaded: string[] = []
+    const state = { destroyed: false, size: [0, 0], loads: 0 }
+    const listeners = new Set<(event: unknown, dirty: unknown, image: unknown) => void>()
+    const frame = (empty: boolean) => ({
+      isEmpty: () => empty,
+      getSize: () => ({ width: state.size[0], height: state.size[1] }),
+      toPNG: () => Buffer.from(`png ${state.loads}`),
+      toJPEG: (quality: number) => Buffer.from(`jpeg ${quality} ${state.loads}`),
+    })
+    const win = {
+      setContentSize: (width: number, height: number) => {
+        sizes.push([width, height])
+        state.size = [width, height]
+      },
+      loadFile: async (path: string) => {
+        loaded.push(readFileSync(path, 'utf8'))
+        state.loads++
+      },
+      destroy: () => {
+        state.destroyed = true
+      },
+      webContents: {
+        on: (_name: string, listener: (event: unknown, dirty: unknown, image: unknown) => void) =>
+          listeners.add(listener),
+        off: (_name: string, listener: (event: unknown, dirty: unknown, image: unknown) => void) =>
+          listeners.delete(listener),
+        invalidate: () => {
+          if (paints) for (const listener of listeners) listener({}, {}, frame(false))
+        },
+      },
+    } as unknown as ImageWindow
+    return { win, sizes, loaded, state, listeners }
+  }
+
+  it('draws each page at its own size, scaled, and saves it in the format asked for', async () => {
+    const { win, sizes, loaded, state, listeners } = offscreen()
+    const saved: [number, string][] = []
+    await printJobToImages(
+      {
+        mode: 'jpg',
+        pages: [
+          { svg: '<svg id="one"/>', width: 793.7, height: 1122.5 },
+          { svg: '<svg id="two"/>', width: 1122.5, height: 793.7 },
+        ],
+        images: [],
+      },
+      'jpg',
+      () => win,
+      async (index, bytes) => {
+        saved.push([index, bytes.toString()])
+      },
+    )
+    expect(sizes).toEqual([
+      [Math.round(793.7 * IMAGE_SCALE), Math.round(1122.5 * IMAGE_SCALE)],
+      [Math.round(1122.5 * IMAGE_SCALE), Math.round(793.7 * IMAGE_SCALE)],
+    ])
+    expect(loaded[0]).toContain('id="p0-one"')
+    expect(loaded[1]).toContain('id="p0-two"')
+    // each page's frame is one drawn after its own load
+    expect(saved).toEqual([
+      [0, 'jpeg 90 1'],
+      [1, 'jpeg 90 2'],
+    ])
+    expect(state.destroyed).toBe(true)
+    expect(listeners.size).toBe(0)
+  })
+
+  it('stops at a page that is never drawn, and still closes the window', async () => {
+    // only the frame wait's clock is fake: the job's files are written for real
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    const { win, state } = offscreen(false)
+    let settled = false
+    const done = expect(
+      printJobToImages(
+        { mode: 'png', pages: [{ svg: '<svg/>', width: 10, height: 10 }], images: [] },
+        'png',
+        () => win,
+        async () => undefined,
+      ),
+    )
+      .rejects.toThrow(/page 1/)
+      .finally(() => {
+        settled = true
+      })
+    for (let i = 0; i < 1000 && !settled; i++) {
+      await new Promise((resolve) => setImmediate(resolve))
+      await vi.advanceTimersByTimeAsync(100)
+    }
+    await done
+    vi.useRealTimers()
+    expect(state.destroyed).toBe(true)
   })
 })

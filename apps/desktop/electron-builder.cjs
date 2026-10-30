@@ -19,6 +19,9 @@ module.exports = {
     { from: '../hwp/out/renderer', to: 'modules/hwp/renderer' },
     { from: '../hwp/out/preload', to: 'modules/hwp/preload' },
     { from: '../../vendor/rhwp-core/rhwp_bg.wasm', to: 'wasm/rhwp_bg.wasm' },
+    // pdf.js data for bringing in PDFs: character maps (Korean, Chinese, Japanese text) and standard fonts
+    { from: '../../node_modules/pdfjs-dist/cmaps', to: 'pdfjs/cmaps' },
+    { from: '../../node_modules/pdfjs-dist/standard_fonts', to: 'pdfjs/standard_fonts' },
     { from: '../../LICENSE', to: 'LICENSE.txt' },
     { from: '../../NOTICE', to: 'NOTICE.txt' },
     { from: 'build/THIRD-PARTY-NOTICES.txt', to: 'THIRD-PARTY-NOTICES.txt' },

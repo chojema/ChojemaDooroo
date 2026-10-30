@@ -76,6 +76,8 @@ const FILE_MENU = [
   { command: 'save', id: 'ext:ieum-save', shortcut: 'Ctrl+S' },
   { command: 'saveAs', id: 'ext:ieum-save-as', shortcut: 'Ctrl+Shift+S' },
   { command: 'pdf', id: 'ext:ieum-export-pdf' },
+  { command: 'png', id: 'ext:ieum-export-png' },
+  { command: 'jpg', id: 'ext:ieum-export-jpg' },
   { command: 'print', id: 'ext:ieum-print', shortcut: 'Ctrl+P' },
 ]
 /** The command that reads what the user has selected in the editor. */
@@ -5304,10 +5306,10 @@ export const agentPlugin = {
       }),
 
       /**
-       * Put Save, Save As, Export as PDF and Print at the top of the editor's File menu. The
-       * embedded editor leaves out its own (the app owns the file), which left the menu with
-       * no way to save. Each item fires FILE_COMMAND_EVENT on the editor's window and the app
-       * does the rest. `labels` holds the four names in the app's language, by command. A
+       * Put Save, Save As, Export as PDF, PNG and JPG, and Print at the top of the editor's
+       * File menu. The embedded editor leaves out its own (the app owns the file), which left
+       * the menu with no way to save. Each item fires FILE_COMMAND_EVENT on the editor's window and the app
+       * does the rest. `labels` holds the six names in the app's language, by command. A
        * second call puts the items back where they were; the names stay the first ones.
        */
       installFileMenu: guarded((labels) => {

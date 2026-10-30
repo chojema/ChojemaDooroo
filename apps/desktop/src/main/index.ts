@@ -1,13 +1,15 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, safeStorage, shell, webContents } from 'electron'
 import type { WebContents, WebContentsView, MenuItemConstructorOptions } from 'electron'
 import type { AppCommand } from '../../../hwp/src/shared/ipc'
-import { basename, join, resolve, isAbsolute } from 'node:path'
+import { basename, dirname, join, resolve, isAbsolute } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
+import { rm } from 'node:fs/promises'
 import { configureAssistant, registerAiIpc, registerProjectIpc, assistantSetup, saveAssistantSetup } from '../services/main/assistant'
 import {
   configureHwpRuntime, createHwpView, requestHwpClose,
   requestHwpSave, requestHwpPrint, setHwpFileSavedHook,
 } from '../../../hwp/src/main/hwp-main'
+import { importPdfAsHwpx, PdfImportError } from '../../../hwp/src/main/pdf-import'
 import {
   registerRendererScheme, installRendererProtocol, installNavigationGuard,
   installContextMenu, contextMenuLabels, DROP_OPEN_CHANNEL,
@@ -19,7 +21,7 @@ import { setUiLang, getUiLang } from '@genoffice/i18n'
 import { DEFAULT_AI_PANEL_PREFS, normalizeAiPanelPrefs } from '@genoffice/ui/ai-panel-prefs'
 import { OUTBOUND_CHANNELS, confirmRequestOf } from '@genoffice/electron-utils/outbound-channels'
 import { autoUpdater } from 'electron-updater'
-import { CHANNEL, STATE_CHANNEL, RELEASES, editorForPath, paneBounds } from '../shared/contracts'
+import { CHANNEL, STATE_CHANNEL, RELEASES, editorForPath, isOpenablePath, isPdfPath, paneBounds } from '../shared/contracts'
 import type { AppState, EditorKind } from '../shared/contracts'
 
 // Chojema Dooroo host. Editor engines and their save protections stay upstream-owned.
@@ -166,7 +168,8 @@ function saved(wcId: number, path: string) {
   remember(path)
   if (host) layout(host)
 }
-function openTab(host: Host, kind: EditorKind, path?: string) {
+/** `copy`: a file to open as a new, untitled document (a PDF brought in) instead of `path`. */
+function openTab(host: Host, kind: EditorKind, path?: string, copy?: string) {
   if (path) {
     const existing = allTabs().find((t) => t.path && resolve(t.path).toLowerCase() === resolve(path).toLowerCase())
     if (existing) {
@@ -175,8 +178,8 @@ function openTab(host: Host, kind: EditorKind, path?: string) {
       return existing
     }
   }
-  const view = createHwpView(path)
-  const tab: Tab = { id: `doc-${nextId++}`, kind, title: path ? basename(path) : '새 문서.hwpx', path, view }
+  const view = copy ? createHwpView(copy, { untitledCopy: true }) : createHwpView(path)
+  const tab: Tab = { id: `doc-${nextId++}`, kind, title: path ? basename(path) : copy ? basename(copy) : '새 문서.hwpx', path, view }
   host.tabs.push(tab)
   host.win.contentView.addChildView(view)
   view.webContents.on('focus', () => {
@@ -197,12 +200,36 @@ function openTab(host: Host, kind: EditorKind, path?: string) {
 function hostForTab(tab: Tab) { return [...hosts].find((h) => h.tabs.includes(tab)) }
 async function openPath(host: Host, path: unknown) {
   if (typeof path !== 'string' || !isAbsolute(path) || !existsSync(path)) throw new Error('문서 파일을 찾을 수 없습니다.')
+  if (isPdfPath(path)) return importPdf(host, resolve(path))
   const kind = editorForPath(path)
-  if (!kind) throw new Error('HWP 또는 HWPX 파일을 선택해 주세요.')
+  if (!kind) throw new Error('HWP, HWPX 또는 PDF 파일을 선택해 주세요.')
   openTab(host, kind, resolve(path))
 }
+const PDF_IMPORT_MESSAGES: Record<PdfImportError['reason'], string> = {
+  encrypted: '암호가 걸린 PDF는 가져올 수 없습니다.',
+  'no-text': 'PDF에서 가져올 텍스트를 찾지 못했습니다. 스캔한 그림으로 된 PDF는 가져올 수 없습니다.',
+  'too-large': 'PDF가 너무 커서 가져올 수 없습니다.',
+  unreadable: 'PDF 파일을 읽지 못했습니다.',
+}
+/**
+ * A PDF opens as a new, untitled HWPX document made from its text; the made file's
+ * folder goes when its tab does. A failure is told here, whichever way the PDF came.
+ */
+async function importPdf(host: Host, path: string) {
+  let made: string
+  try {
+    made = await importPdfAsHwpx(path)
+  } catch (error) {
+    console.warn('[pdf-import]', error)
+    const message = error instanceof PdfImportError ? PDF_IMPORT_MESSAGES[error.reason] : PDF_IMPORT_MESSAGES.unreadable
+    await dialog.showMessageBox(host.win, { type: 'info', message, detail: basename(path) })
+    return
+  }
+  const tab = openTab(host, 'hwp', undefined, made)
+  tab.view.webContents.once('destroyed', () => { void rm(dirname(made), { recursive: true, force: true }) })
+}
 async function openDialog(host: Host) {
-  const result = await dialog.showOpenDialog(host.win, { properties: ['openFile', 'multiSelections'], filters: [{ name: '한글 문서', extensions: ['hwp', 'hwpx'] }] })
+  const result = await dialog.showOpenDialog(host.win, { properties: ['openFile', 'multiSelections'], filters: [{ name: '한글 문서 및 PDF', extensions: ['hwp', 'hwpx', 'pdf'] }, { name: '한글 문서', extensions: ['hwp', 'hwpx'] }, { name: 'PDF (텍스트를 새 문서로 가져오기)', extensions: ['pdf'] }] })
   for (const path of result.filePaths) await openPath(host, path)
 }
 async function mayClose(tab: Tab, host: Host) {
@@ -415,7 +442,7 @@ const locked = app.requestSingleInstanceLock()
 if (!locked) app.quit()
 else {
   app.on('open-file', (event, path) => { event.preventDefault(); if (!app.isReady()) pendingPaths.push(path); else void openPath(focusedHost(), path).catch(() => {}) })
-  app.on('second-instance', (_event, argv) => { const host = focusedHost(); host.win.show(); host.win.focus(); for (const path of argv.filter((p) => editorForPath(p))) void openPath(host, path).catch(() => {}) })
+  app.on('second-instance', (_event, argv) => { const host = focusedHost(); host.win.show(); host.win.focus(); for (const path of argv.filter((p) => isOpenablePath(p))) void openPath(host, path).catch(() => {}) })
   void app.whenReady().then(async () => {
     setUiLang('ko')
     setAiSecretCodec(safeStorageCodec(safeStorage, process.platform, () => sealingKeyOnDisk(join(app.getPath('userData'), 'Local State'))))
@@ -425,7 +452,7 @@ else {
     await initSubscriptionChildTracking(app.getPath('userData')).catch(() => {})
     installMenu()
     const host = createHost()
-    for (const path of [...pendingPaths, ...process.argv.filter((p) => editorForPath(p) && isAbsolute(p))]) await openPath(host, path).catch(() => {})
+    for (const path of [...pendingPaths, ...process.argv.filter((p) => isOpenablePath(p) && isAbsolute(p))]) await openPath(host, path).catch(() => {})
     if (!host.tabs.length) {
       if (host.win.webContents.isLoading()) host.win.webContents.once('did-finish-load', () => { if (!host.tabs.length) openTab(host, 'hwp') })
       else openTab(host, 'hwp')

@@ -108,8 +108,15 @@ export interface AppMenuItem {
 /** What the editor's menus ask for (see the plugin's FILE_COMMAND_EVENT). */
 export type FileCommand = SaveMode | PrintMode | AppCommand
 
-/** Where the pages go: a PDF file, or the printer through the system print dialog. */
-export type PrintMode = 'pdf' | 'print'
+/**
+ * Where the pages go: a PDF file, the printer through the system print dialog, or one
+ * picture file (PNG or JPEG) for each page.
+ */
+export type PrintMode = 'pdf' | 'print' | ImageFormat
+
+/** The picture formats pages are exported to, one file a page. */
+export type ImageFormat = 'png' | 'jpg'
+export const IMAGE_FORMATS: readonly ImageFormat[] = ['png', 'jpg']
 
 /** One page as the editor draws it for printing: SVG, and its size in CSS pixels. */
 export interface PrintPage {
@@ -130,7 +137,7 @@ export interface PrintJob {
 
 export type PrintResult =
   | { ok: true; canceled: true }
-  | { ok: true; canceled?: false; path?: string }
+  | { ok: true; canceled?: false; path?: string; paths?: string[] }
   | { ok: false; error: string }
 
 /** Most pages one job takes; past it the job is refused rather than run out of memory. */
