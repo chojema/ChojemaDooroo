@@ -23,7 +23,7 @@ export function editorForPath(path: string): EditorKind | undefined {
   return undefined
 }
 export function paneBounds(width: number, height: number, split: boolean) {
-  const top = 76
+  const top = 36
   const available = Math.max(0, height - top)
   const left = split ? Math.floor((width - 6) / 2) : width
   return {

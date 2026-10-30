@@ -5346,6 +5346,67 @@ export const agentPlugin = {
       }),
 
       /**
+       * Put the app's own commands (new, open, home, split view…) into the editor's menus,
+       * which stand in for a window menu of the app's. `items` go in the order given: those
+       * with `position: 'top'` stand on top of their menu in that order, the rest at its
+       * bottom. Each fires FILE_COMMAND_EVENT with its `command`, as the File items do. An
+       * item's `replaces` names an editor command whose menu item it takes the place of.
+       */
+      installAppMenu: guarded((items) => {
+        if (!Array.isArray(items)) throw fail('BAD_ARGUMENT', 'items must be an array')
+        for (const item of items) {
+          for (const key of ['command', 'label', 'menuId']) {
+            if (typeof item?.[key] !== 'string' || !item[key]) {
+              throw fail('BAD_ARGUMENT', `items[].${key} must be a non-empty string`)
+            }
+          }
+        }
+        if (!host.automation.registerCommand || !host.automation.addMenuItem) return { ok: false }
+        const idOf = (item) => `ext:ieum-app-${item.command}`
+        for (const item of items) {
+          try {
+            host.automation.registerCommand({
+              id: idOf(item),
+              label: item.label,
+              ...(item.shortcut ? { shortcutLabel: item.shortcut } : {}),
+              execute: () => {
+                globalThis.dispatchEvent?.(
+                  new CustomEvent(FILE_COMMAND_EVENT, { detail: item.command }),
+                )
+              },
+            })
+          } catch {
+            // registered by an earlier call
+          }
+        }
+        let ok = true
+        // each top item goes on top, so the last one put there comes first
+        const top = items.filter((item) => item.position === 'top').reverse()
+        const bottom = items.filter((item) => item.position !== 'top')
+        for (const item of [...top, ...bottom]) {
+          try {
+            host.automation.addMenuItem({
+              menuId: item.menuId,
+              commandId: idOf(item),
+              position: item.position === 'top' ? 'top' : 'bottom',
+            })
+          } catch {
+            // an editor without that menu
+            ok = false
+          }
+        }
+        for (const item of items) {
+          if (typeof item.replaces !== 'string' || !item.replaces) continue
+          try {
+            host.automation.removeMenuItem?.(item.replaces)
+          } catch {
+            // not in any menu
+          }
+        }
+        return { ok }
+      }),
+
+      /**
        * Show a place in the editor: its caret goes there, the run is selected, and the view
        * scrolls to it. `place` is what a change handed back. Answers false when the editor
        * cannot (no caret yet, or the place is gone).

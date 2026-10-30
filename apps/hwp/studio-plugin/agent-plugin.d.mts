@@ -481,6 +481,19 @@ export type AgentDeleteTableResult =
 /** What a File menu item of the editor asks the app to do. */
 export type AgentFileCommand = 'save' | 'saveAs' | 'pdf' | 'print'
 
+/** One of the app's commands put into an editor menu by installAppMenu. */
+export interface AgentAppMenuItem {
+  command: string
+  label: string
+  /** the editor menu: 'file', 'view', 'tool'… */
+  menuId: string
+  /** on top of the menu, or (the default) at its bottom */
+  position?: 'top' | 'bottom'
+  shortcut?: string
+  /** an editor command whose menu item this one takes the place of */
+  replaces?: string
+}
+
 /** The event those items fire on the editor's window; `detail` is the AgentFileCommand. */
 export declare const FILE_COMMAND_EVENT: 'ieum:file-command'
 
@@ -824,6 +837,7 @@ export interface AgentPluginSurface {
   ): AgentRemoveLinesResult
   deleteTable(table: number, options?: AgentChangeOptions): AgentDeleteTableResult
   installFileMenu(labels: Record<AgentFileCommand, string>): { ok: boolean }
+  installAppMenu(items: AgentAppMenuItem[]): { ok: boolean }
   reveal(place: AgentPlace): { ok: boolean }
   selection(): AgentSelectionResult
   replaceSelection(
@@ -939,6 +953,7 @@ export interface AgentPluginHost {
       execute(services: never, params?: never): void
     }): void
     addMenuItem?(spec: { menuId: string; commandId: string; position?: 'top' | 'bottom' }): void
+    removeMenuItem?(commandId: string): void
   }
 }
 

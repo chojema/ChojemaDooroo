@@ -36,7 +36,7 @@ import { runSave, type SaveEditorPort } from './save-flow'
 import { AUTOSAVE_IDLE_MS, startAutosave } from './autosave-flow'
 import { PASSWORD_FLAG } from '../../scripts/rhwp-patches.mjs'
 import { STUDIO_SETTINGS_KEY, seededStudioSettings, studioUrl } from './studio-settings'
-import { hwpFormatOfPath } from '../shared/ipc'
+import { APP_COMMANDS, hwpFormatOfPath } from '../shared/ipc'
 import type { HwpFormat, SaveMode, UiTheme } from '../shared/ipc'
 
 /**
@@ -438,10 +438,17 @@ export default function App() {
         print: t('filePrint'),
       })
       .catch(() => {})
+    // the shell's own commands (new, open, home, split view…) live in the editor's menus too
+    void window.hwpApi
+      .getAppMenu()
+      .then((items) => (items.length ? agentBridge.installAppMenu(items) : undefined))
+      .catch(() => {})
     const onCommand = (event: Event) => {
       const command = (event as CustomEvent<unknown>).detail
       if (command === 'save' || command === 'saveAs' || command === 'pdf' || command === 'print') {
         window.hwpApi.requestFileCommand(command)
+      } else if ((APP_COMMANDS as readonly unknown[]).includes(command)) {
+        window.hwpApi.requestFileCommand(command as (typeof APP_COMMANDS)[number])
       }
     }
     // the editor's Insert > Memo menu (T4): bring the memo column out and start adding

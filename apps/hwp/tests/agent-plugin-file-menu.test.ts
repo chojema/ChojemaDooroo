@@ -105,6 +105,76 @@ describe('the File menu of the embedded editor', () => {
   })
 })
 
+describe("the app's own commands in the editor's menus", () => {
+  function menus() {
+    const commands = new Map<string, Registered>()
+    const lists: Record<string, string[]> = { file: ['file:page-setup', 'file:about'], view: ['view:zoom-in'], tool: [] }
+    const host = {
+      read: () => undefined,
+      transaction: () => undefined,
+      events: { on: () => 0 },
+      automation: {
+        execute: () => ({ ok: false }),
+        registerCommand: (command: Registered) => {
+          if (commands.has(command.id)) throw new Error(`already registered: ${command.id}`)
+          commands.set(command.id, command)
+        },
+        addMenuItem: (spec: { menuId: string; commandId: string; position?: 'top' | 'bottom' }) => {
+          const list = lists[spec.menuId]
+          if (!list) throw new Error(`no menu ${spec.menuId}`)
+          const at = list.indexOf(spec.commandId)
+          if (at >= 0) list.splice(at, 1)
+          if (spec.position === 'top') list.unshift(spec.commandId)
+          else list.push(spec.commandId)
+        },
+        removeMenuItem: (commandId: string) => {
+          for (const list of Object.values(lists)) {
+            const at = list.indexOf(commandId)
+            if (at >= 0) list.splice(at, 1)
+          }
+        },
+      },
+    } as unknown as AgentPluginHost
+    return { plugin: agentPlugin.activate(host), commands, lists }
+  }
+  const ITEMS = [
+    { command: 'new', label: '새 문서', menuId: 'file', position: 'top' as const, shortcut: 'Alt+N' },
+    { command: 'open', label: '열기…', menuId: 'file', position: 'top' as const },
+    { command: 'close', label: '문서 닫기', menuId: 'file' },
+    { command: 'home', label: '홈', menuId: 'view' },
+    { command: 'split', label: '나란히 보기', menuId: 'view' },
+  ]
+
+  it('puts top items on top in the given order and the rest at the bottom', () => {
+    const { plugin, commands, lists } = menus()
+    expect(plugin.installAppMenu(ITEMS)).toEqual({ ok: true })
+    expect(lists.file).toEqual(['ext:ieum-app-new', 'ext:ieum-app-open', 'file:page-setup', 'file:about', 'ext:ieum-app-close'])
+    expect(lists.view).toEqual(['view:zoom-in', 'ext:ieum-app-home', 'ext:ieum-app-split'])
+    expect(commands.get('ext:ieum-app-new')).toMatchObject({ label: '새 문서', shortcutLabel: 'Alt+N' })
+  })
+
+  it("takes the place of the editor's own item it replaces", () => {
+    const { plugin, lists } = menus()
+    plugin.installAppMenu([{ command: 'about', label: '정보', menuId: 'tool', replaces: 'file:about' }])
+    expect(lists.file).toEqual(['file:page-setup'])
+    expect(lists.tool).toEqual(['ext:ieum-app-about'])
+  })
+
+  it('hands each command to the app as an event on the editor window', () => {
+    const { plugin, commands } = menus()
+    plugin.installAppMenu(ITEMS)
+    for (const item of ITEMS) commands.get(`ext:ieum-app-${item.command}`)?.execute(undefined as never)
+    expect(fired).toEqual(['new', 'open', 'close', 'home', 'split'])
+  })
+
+  it('places what it can when a menu is missing, and refuses items without a label', () => {
+    const { plugin, lists } = menus()
+    expect(plugin.installAppMenu([...ITEMS, { command: 'about', label: '정보', menuId: 'help' }])).toEqual({ ok: false })
+    expect(lists.view).toContain('ext:ieum-app-split')
+    expect(() => menus().plugin.installAppMenu([{ command: 'home', label: '', menuId: 'view' }])).toThrow(/label/)
+  })
+})
+
 afterAll(() => {
   if (original === undefined) delete scope.dispatchEvent
   else scope.dispatchEvent = original

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, safeStorage, shell, webContents } from 'electron'
 import type { WebContents, WebContentsView, MenuItemConstructorOptions } from 'electron'
+import type { AppCommand } from '../../../hwp/src/shared/ipc'
 import { basename, join, resolve, isAbsolute } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { configureAssistant, registerAiIpc, registerProjectIpc, assistantSetup, saveAssistantSetup } from '../services/main/assistant'
@@ -69,6 +70,22 @@ configureHwpRuntime({
   openFileDialog: () => { void openDialog(focusedHost()) },
   goHome: () => { const host = focusedHost(); host.page = 'home'; layout(host) },
   newDocument: () => { openTab(focusedHost(), 'hwp') },
+  // The app shows no window menu: its own commands sit in the editor's menus instead.
+  appMenu: [
+    { command: 'new', label: '새 문서', menuId: 'file', position: 'top', shortcut: 'Alt+N' },
+    { command: 'open', label: '열기…', menuId: 'file', position: 'top', shortcut: 'Ctrl+O' },
+    { command: 'close', label: '문서 닫기', menuId: 'file', shortcut: 'Ctrl+W' },
+    { command: 'home', label: '홈', menuId: 'view' },
+    { command: 'split', label: '나란히 보기', menuId: 'view' },
+    { command: 'detach', label: '창으로 분리', menuId: 'view' },
+    { command: 'settings', label: 'Chojema Dooroo 설정', menuId: 'tool' },
+    { command: 'check-update', label: '업데이트 확인', menuId: 'tool' },
+    { command: 'about', label: 'Chojema Dooroo 정보', menuId: 'tool', replaces: 'file:about' },
+  ],
+  appCommand: (wc, command) => {
+    const host = ownerFor(wc.id)
+    if (host) void runAppCommand(host, command)
+  },
 })
 function allTabs() { return [...hosts].flatMap((h) => h.tabs) }
 function ownerFor(wcId: number) { return [...hosts].find((h) => h.win.webContents.id === wcId || h.tabs.some((t) => t.view.webContents.id === wcId)) }
@@ -100,6 +117,32 @@ function layout(host: Host) {
   }
   host.win.setTitle(activeTab(host) && host.page === 'editor' ? `${activeTab(host)!.title} — Chojema Dooroo` : 'Chojema Dooroo')
   publish(host)
+}
+function showPage(host: Host, page: AppState['page']) { host.page = page; layout(host) }
+function toggleSplit(host: Host) {
+  if (host.secondary) host.secondary = undefined
+  else {
+    if (host.tabs.length < 2) throw new Error('나란히 보려면 문서를 두 개 이상 열어 주세요.')
+    host.secondary = host.tabs.find((t) => t.id !== host.active)?.id
+  }
+  layout(host)
+}
+async function runAppCommand(host: Host, command: AppCommand) {
+  try {
+    switch (command) {
+      case 'new': openTab(host, 'hwp'); break
+      case 'open': await openDialog(host); break
+      case 'close': await closeTab(host); break
+      case 'home': showPage(host, 'home'); break
+      case 'settings': showPage(host, 'settings'); break
+      case 'split': toggleSplit(host); break
+      case 'detach': detach(host); break
+      case 'check-update': showPage(host, 'settings'); await checkUpdate(); break
+      case 'about': await about(host); break
+    }
+  } catch (error) {
+    await dialog.showMessageBox(host.win, { type: 'info', message: error instanceof Error ? error.message : String(error) })
+  }
 }
 function activate(host: Host, id: string) {
   if (!host.tabs.some((t) => t.id === id)) return
@@ -194,7 +237,10 @@ function detach(host: Host) {
   layout(host)
 }
 function createHost(): Host {
-  const win = new BrowserWindow({ width: 1360, height: 940, minWidth: 950, minHeight: 650, backgroundColor: '#f7f8fa', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } })
+  const win = new BrowserWindow({ width: 1360, height: 940, minWidth: 950, minHeight: 650, backgroundColor: '#f7f8fa', show: false, autoHideMenuBar: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } })
+  // No menu bar: the editor's menus carry the app's commands. The application menu stays
+  // set, unseen, so its shortcuts (Ctrl+W, Ctrl+Tab, F11) keep working.
+  win.setMenuBarVisibility(false)
   const host: Host = { win, tabs: [], page: 'home', closing: false, allowClose: false }
   hosts.add(host)
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -248,15 +294,8 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
       case 'open-path': await openPath(host, value); break
       case 'activate': if (typeof value === 'string') activate(host, value); break
       case 'close': if (typeof value === 'string') await closeTab(host, value); break
-      case 'home': host.page = 'home'; layout(host); break
-      case 'settings': host.page = 'settings'; layout(host); break
-      case 'split': {
-        if (!host.secondary) host.secondary = host.tabs.find((t) => t.id !== host.active)?.id
-        else host.secondary = undefined
-        if (host.tabs.length < 2) throw new Error('나란히 보려면 문서를 두 개 이상 열어 주세요.')
-        layout(host); break
-      }
-      case 'detach': detach(host); break
+      case 'home': showPage(host, 'home'); break
+      case 'settings': showPage(host, 'settings'); break
       case 'theme':
         if (value !== 'light' && value !== 'dark' && value !== 'system') throw new Error('Invalid theme')
         settings.theme = value; nativeTheme.themeSource = value; persist()

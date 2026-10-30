@@ -99,6 +99,7 @@ const api: HwpApi = {
     ipcRenderer.invoke(HWP_CHANNELS.commitSave, bytes, tabs, options),
   abortSave: () => ipcRenderer.send(HWP_CHANNELS.abortSave),
   requestFileCommand: (command) => ipcRenderer.send(HWP_CHANNELS.fileCommand, command),
+  getAppMenu: () => ipcRenderer.invoke(HWP_CHANNELS.appMenu),
   setDirty: (dirty) => ipcRenderer.send(HWP_CHANNELS.dirtyChanged, dirty),
   onSaveRequest: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, mode: SaveMode) => handler(mode)

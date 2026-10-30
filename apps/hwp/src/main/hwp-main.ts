@@ -47,8 +47,10 @@ import { sectionTailsOf } from './section-tails'
 import type { SectionTails } from './section-tails'
 import { newTabsOf } from './tab-widths'
 import { hasTrackedChanges, withoutTrackedChanges } from './tracked-changes'
-import { HWP_CHANNELS, MAX_HWP_SAVE_BYTES, hwpFormatOfPath } from '../shared/ipc'
+import { APP_COMMANDS, HWP_CHANNELS, MAX_HWP_SAVE_BYTES, hwpFormatOfPath } from '../shared/ipc'
 import type {
+  AppCommand,
+  AppMenuItem,
   BeginSaveResult,
   CommitSaveResult,
   HwpFormat,
@@ -74,6 +76,10 @@ interface RuntimePaths {
   goHome?: () => void
   /** a new Hangul document in a tab (Hangul's Alt+N) */
   newDocument?: () => void
+  /** one of the shell's commands from the editor's menus; the app has no window menu */
+  appCommand?: (wc: WebContents, command: AppCommand) => void
+  /** the shell commands to put into the editor's menus, named in the app's language */
+  appMenu?: AppMenuItem[]
 }
 
 let runtime: RuntimePaths = { preloadPath: '' }
@@ -748,6 +754,7 @@ function registerHwpIpc(): void {
   ipcMain.on(HWP_CHANNELS.fileCommand, (e, command: unknown) => {
     if (command === 'save' || command === 'saveAs') void requestHwpSave(e.sender, command)
     else if (command === 'pdf' || command === 'print') requestHwpPrint(e.sender, command)
+    else if ((APP_COMMANDS as readonly unknown[]).includes(command)) runtime.appCommand?.(e.sender, command as AppCommand)
   })
 
   ipcMain.on(HWP_CHANNELS.abortSave, (e) => {
@@ -773,6 +780,7 @@ function registerHwpIpc(): void {
   // Language channel shared with other modules; removeHandler tolerates duplicate registration
   ipcMain.removeHandler(HWP_CHANNELS.getLanguage)
   ipcMain.handle(HWP_CHANNELS.getLanguage, () => getUiLang())
+  ipcMain.handle(HWP_CHANNELS.appMenu, () => runtime.appMenu ?? [])
 }
 
 /**

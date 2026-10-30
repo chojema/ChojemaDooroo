@@ -17,6 +17,7 @@ export const HWP_CHANNELS = {
   saveRequest: 'hwp:save-request',
   printRequest: 'hwp:print-request',
   fileCommand: 'hwp:file-command',
+  appMenu: 'hwp:app-menu',
   printPages: 'hwp:print-pages',
   dirtyChanged: 'hwp:dirty-changed',
   closeSaveRequest: 'hwp:close-save-request',
@@ -87,8 +88,23 @@ export const AI_CHANNELS = {
 export type UiTheme = 'light' | 'dark' | 'system'
 export type SaveMode = 'save' | 'saveAs'
 
-/** What the editor's File menu asks for (see the plugin's FILE_COMMAND_EVENT). */
-export type FileCommand = SaveMode | PrintMode
+/** The shell's own commands the editor menus carry (the plugin's installAppMenu). */
+export const APP_COMMANDS = ['new', 'open', 'close', 'home', 'split', 'detach', 'settings', 'check-update', 'about'] as const
+export type AppCommand = (typeof APP_COMMANDS)[number]
+
+/** One shell command as an editor menu item; the shell names it in its own language. */
+export interface AppMenuItem {
+  command: AppCommand
+  label: string
+  menuId: 'file' | 'view' | 'tool'
+  position?: 'top' | 'bottom'
+  shortcut?: string
+  /** the editor's own command this item stands in for; its menu item goes */
+  replaces?: string
+}
+
+/** What the editor's menus ask for (see the plugin's FILE_COMMAND_EVENT). */
+export type FileCommand = SaveMode | PrintMode | AppCommand
 
 /** Where the pages go: a PDF file, or the printer through the system print dialog. */
 export type PrintMode = 'pdf' | 'print'
@@ -317,6 +333,8 @@ export interface HwpApi {
    * it answers Ctrl+S and Ctrl+P, with a save or print request back to this view
    */
   requestFileCommand(command: FileCommand): void
+  /** the shell commands the editor's menus carry, since the app has no window menu */
+  getAppMenu(): Promise<AppMenuItem[]>
   /** the File menu or Ctrl+P asks for a PDF or a print */
   onPrintRequest(handler: (mode: PrintMode) => void): () => void
   /** make the PDF (asking where) or open the print dialog for these pages */
