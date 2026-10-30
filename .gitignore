@@ -11,6 +11,8 @@ apps/desktop/build/THIRD-PARTY-NOTICES.txt
 .agents/
 .codex/
 .aws/
+**/.bkit-memory.json
+**/.pdca-status.json
 .env
 .env.*
 !.env.example
