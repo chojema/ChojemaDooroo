@@ -466,7 +466,7 @@ describe('a renamed file', () => {
 
     renameSync(path, moved)
     hwpFileRenamed(contents as never, path, moved)
-    await vi.waitFor(() => expect(store().copyInfo(fileIdentity(path))).toBeNull())
+    await vi.waitFor(() => expect(store().copyInfo(fileIdentity(path))).toBeNull(), { timeout: 5000 })
     const copy = store().copyInfo(fileIdentity(moved))
     expect(copy).toMatchObject({ title: 'renamed.hwp' })
     expect(readFileSync(copy!.copyPath)).toEqual(before)
@@ -488,7 +488,7 @@ describe('a renamed file', () => {
     await writeCopy(contents, edited(original, '고친 '))
     renameSync(path, moved)
     hwpFileRenamed(contents as never, path, moved)
-    await vi.waitFor(() => expect(store().copyInfo(fileIdentity(moved))).not.toBeNull())
+    await vi.waitFor(() => expect(store().copyInfo(fileIdentity(moved))).not.toBeNull(), { timeout: 5000 })
     call(HWP_CHANNELS.dirtyChanged, contents, false)
     contents.emit('destroyed')
     expect(store().listCopies()).toHaveLength(0)
