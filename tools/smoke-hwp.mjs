@@ -64,18 +64,19 @@ try {
   const filters = await app.evaluate(() => globalThis.__chojemaSaveFilters)
   assert.deepEqual(filters[0].extensions, ['hwpx'])
   await home.getByRole('tab', { name: /smoke.hwpx/ }).waitFor()
-  await home.locator('header [data-action="new-hwp"]').click()
+  // the app has no toolbar or window menu: its commands come from the editor's menus
+  await hwp.evaluate(() => window.hwpApi.requestFileCommand('new'))
   for (let i = 0; i < 120; i++) {
     if (await app.evaluate(({ webContents }) => webContents.getAllWebContents().filter((wc) => wc.getURL().includes('://hwp')).length) === 2) break
     await pause(250)
   }
-  await home.locator('header [data-action="split"]').click()
+  await hwp.evaluate(() => window.hwpApi.requestFileCommand('split'))
   const idsBefore = await app.evaluate(({ webContents }) => webContents.getAllWebContents().filter((wc) => wc.getURL().includes('://hwp')).map((wc) => wc.id).sort((a,b) => a-b))
   assert.equal(idsBefore.length, 2)
   await home.screenshot({ path: join(work, 'split.png') })
   await home.getByRole('tab', { name: /smoke.hwpx/ }).click()
   const newWindow = app.waitForEvent('window')
-  await home.locator('header [data-action="detach"]').click()
+  await hwp.evaluate(() => window.hwpApi.requestFileCommand('detach'))
   const detached = await newWindow
   await detached.locator('[role="tab"]').waitFor()
   const idsAfter = await app.evaluate(({ webContents }) => webContents.getAllWebContents().filter((wc) => wc.getURL().includes('://hwp')).map((wc) => wc.id).sort((a,b) => a-b))
@@ -105,9 +106,10 @@ try {
   const back = await JSZip.loadAsync(await waitFile(roundtrip))
   const backXml = (await Promise.all(Object.keys(back.files).filter((p) => /section\d+\.xml$/.test(p)).map((p) => back.file(p).async('string')))).join('\n')
   assert.match(backXml, /Chojema HWP smoke test/, 'Text survives HWPX to HWP, reopen, and HWPX conversion')
-  await home.locator('header [data-action="settings"]').click()
-  await home.getByRole('heading', { name: '설정', exact: true }).waitFor()
-  await home.getByLabel('화면 테마').selectOption('dark')
+  // the reopened document sits in the detached window, so its settings open there
+  await reopened.evaluate(() => window.hwpApi.requestFileCommand('settings'))
+  await detached.getByRole('heading', { name: '설정', exact: true }).waitFor()
+  await detached.getByLabel('화면 테마').selectOption('dark')
   assert.equal(await home.locator('html').getAttribute('data-theme'), 'dark')
   assert.deepEqual(errors, [], 'No app or optional-bridge handler errors')
   const result = { passed: true, hwpx, hwpFile, roundtrip, editorProcessesPreserved: true, screenshots: work, errors }
