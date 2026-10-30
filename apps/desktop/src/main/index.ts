@@ -131,7 +131,7 @@ function openTab(host: Host, kind: EditorKind, path?: string) {
     }
   }
   const view = createHwpView(path)
-  const tab: Tab = { id: `doc-${nextId++}`, kind, title: path ? basename(path) : '새 한글 문서.hwpx', path, view }
+  const tab: Tab = { id: `doc-${nextId++}`, kind, title: path ? basename(path) : '새 문서.hwpx', path, view }
   host.tabs.push(tab)
   host.win.contentView.addChildView(view)
   view.webContents.on('focus', () => {
@@ -338,7 +338,7 @@ function installMenu() {
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ label: 'Chojema Dooroo', submenu: [{ role: 'about' as const }, { role: 'quit' as const }] }] : []),
     { label: '파일', submenu: [
-      { label: '새 한글 문서', accelerator: 'CmdOrCtrl+N', click: () => openTab(focusedHost(), 'hwp') },
+      { label: '새 문서', accelerator: 'CmdOrCtrl+N', click: () => openTab(focusedHost(), 'hwp') },
       { label: '열기…', accelerator: 'CmdOrCtrl+O', click: () => { void openDialog(focusedHost()) } },
       { type: 'separator' },
       { label: '저장', accelerator: 'CmdOrCtrl+S', click: () => sendDocCommand('save') },
@@ -379,6 +379,10 @@ else {
     installMenu()
     const host = createHost()
     for (const path of [...pendingPaths, ...process.argv.filter((p) => editorForPath(p) && isAbsolute(p))]) await openPath(host, path).catch(() => {})
+    if (!host.tabs.length) {
+      if (host.win.webContents.isLoading()) host.win.webContents.once('did-finish-load', () => { if (!host.tabs.length) openTab(host, 'hwp') })
+      else openTab(host, 'hwp')
+    }
     autoUpdater.setFeedURL({ provider: 'github', owner: 'chojema', repo: 'ChojemaDooroo' })
     autoUpdater.allowPrerelease = app.getVersion().includes('-')
     autoUpdater.autoDownload = false

@@ -22,11 +22,10 @@ async function waitFile(path) {
 }
 try {
   const home = await app.firstWindow()
-  await home.getByRole('heading', { name: '문서에 집중하는 작업 공간' }).waitFor({ timeout: 30_000 })
+  await home.getByRole('tab', { name: /새 문서\.hwpx/ }).waitFor({ timeout: 30_000 })
   assert.equal(await home.title(), 'Chojema Dooroo')
   assert.equal(await home.locator('[data-action="new-docs"]').count(), 0)
   await home.screenshot({ path: join(work, 'home.png') })
-  await home.locator('header [data-action="new-hwp"]').click()
   let hwp
   for (let i = 0; i < 120; i++) {
     hwp = app.context().pages().find((p) => p.url().includes('://hwp'))
