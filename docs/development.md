@@ -32,3 +32,5 @@ npm run test:smoke
 산출물은 `apps/desktop/release/ChojemaDooroo-<버전>-arm64.dmg`, 같은 이름의 ZIP, `apps/desktop/release/mac-arm64/ChojemaDooroo.app`입니다. 실제 패키지 검사는 `CHOJEMA_DOOROO_EXE`에 `.app/Contents/MacOS/ChojemaDooroo` 절대 경로를 넣어 `npm run test:smoke`를 실행합니다. 검사는 임시 사용자 프로필을 사용합니다.
 
 macOS 전용 `build/icon.icns`를 사용하고 로컬 실행용 ad-hoc 서명을 적용합니다. Apple Developer ID 서명과 공증은 포함하지 않으므로 공개 배포용 신뢰 검증과는 구분합니다. Intel(x64) 빌드는 별도 런타임 준비와 검증이 필요합니다.
+
+앱 아이콘 원본은 `apps/desktop/build/*.svg`입니다. 수정한 뒤 macOS에서 `python3 tools/build-icons.py`를 실행하면 `icon.png`, `icon.ico`, `icon.icns`를 다시 만듭니다(Google Chrome, Pillow 필요).
