@@ -572,7 +572,7 @@ function registerHwpIpc(): void {
           ],
         })
         if (picked.canceled || !picked.filePath) return { ok: true, canceled: true }
-        const paths = pagePicturePaths(picked.filePath, format, printJob.pages.length)
+        const paths = pagePicturePaths(picked.filePath, format, printJob.pages.length, printJob.numbers)
         await printJobToImages(printJob, format, imageWindow, (index, bytes) =>
           atomicWriteFile(paths[index]!, bytes),
         )

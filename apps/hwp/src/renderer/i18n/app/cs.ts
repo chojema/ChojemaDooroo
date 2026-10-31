@@ -18,6 +18,15 @@ export const cs = {
   pdfFailed: 'Dokument se nepodařilo exportovat do PDF.',
   imageFailed: 'Stránky se nepodařilo exportovat jako obrázky.',
   printFailed: 'Dokument se nepodařilo vytisknout.',
+  exportRangeTitle: 'Stránky k exportu',
+  exportRangeAll: 'Celý dokument (stran: {count})',
+  exportRangeCurrent: 'Aktuální stránka ({page})',
+  exportRangeCustom: 'Rozsah stránek',
+  exportRangeHint: 'např. 1-3, 5',
+  exportRangeInvalid: 'Zadejte rozsah ve tvaru 1-3, 5.',
+  exportRangeOutside: 'Zadejte čísla stránek od 1 do {count}.',
+  exportRangeConfirm: 'Exportovat',
+  exportRangeCancel: 'Zrušit',
   saveVerifyFailed:
     'Nic se neuložilo: kopie připravená k zápisu se po zpětném načtení neshodovala s dokumentem na obrazovce. Zkuste „Uložit jako“ a zapište nový soubor.',
   saveVerifyHint:

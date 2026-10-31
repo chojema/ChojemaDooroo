@@ -18,6 +18,15 @@ export const de = {
   pdfFailed: 'Das Dokument konnte nicht als PDF exportiert werden.',
   imageFailed: 'Die Seiten konnten nicht als Bilder exportiert werden.',
   printFailed: 'Das Dokument konnte nicht gedruckt werden.',
+  exportRangeTitle: 'Zu exportierende Seiten',
+  exportRangeAll: 'Gesamtes Dokument ({count} Seiten)',
+  exportRangeCurrent: 'Aktuelle Seite (Seite {page})',
+  exportRangeCustom: 'Seitenbereich',
+  exportRangeHint: 'z. B. 1-3, 5',
+  exportRangeInvalid: 'Geben Sie einen Bereich wie 1-3, 5 ein.',
+  exportRangeOutside: 'Geben Sie Seitenzahlen von 1 bis {count} ein.',
+  exportRangeConfirm: 'Exportieren',
+  exportRangeCancel: 'Abbrechen',
   saveVerifyFailed:
     'Es wurde nichts gespeichert: Die zu schreibende Kopie stimmte beim Zurücklesen nicht mit dem angezeigten Dokument überein. Versuchen Sie „Speichern unter“, um eine neue Datei zu schreiben.',
   saveVerifyHint:

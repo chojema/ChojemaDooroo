@@ -18,6 +18,15 @@ export const pl = {
   pdfFailed: 'Nie udało się wyeksportować dokumentu do PDF.',
   imageFailed: 'Nie udało się wyeksportować stron jako obrazów.',
   printFailed: 'Nie udało się wydrukować dokumentu.',
+  exportRangeTitle: 'Strony do eksportu',
+  exportRangeAll: 'Cały dokument (stron: {count})',
+  exportRangeCurrent: 'Bieżąca strona ({page})',
+  exportRangeCustom: 'Zakres stron',
+  exportRangeHint: 'np. 1-3, 5',
+  exportRangeInvalid: 'Wpisz zakres w postaci 1-3, 5.',
+  exportRangeOutside: 'Wpisz numery stron od 1 do {count}.',
+  exportRangeConfirm: 'Eksportuj',
+  exportRangeCancel: 'Anuluj',
   saveVerifyFailed:
     'Niczego nie zapisano: kopia przygotowana do zapisu po ponownym odczytaniu różniła się od dokumentu na ekranie. Spróbuj „Zapisz jako”, aby zapisać nowy plik.',
   saveVerifyHint:

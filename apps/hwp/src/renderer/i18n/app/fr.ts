@@ -18,6 +18,15 @@ export const fr = {
   pdfFailed: "Le document n'a pas pu être exporté en PDF.",
   imageFailed: "Les pages n'ont pas pu être exportées en images.",
   printFailed: "Le document n'a pas pu être imprimé.",
+  exportRangeTitle: 'Pages à exporter',
+  exportRangeAll: 'Document entier ({count} pages)',
+  exportRangeCurrent: 'Page actuelle (page {page})',
+  exportRangeCustom: 'Plage de pages',
+  exportRangeHint: 'ex. : 1-3, 5',
+  exportRangeInvalid: 'Saisissez une plage du type 1-3, 5.',
+  exportRangeOutside: 'Saisissez des numéros de page de 1 à {count}.',
+  exportRangeConfirm: 'Exporter',
+  exportRangeCancel: 'Annuler',
   saveVerifyFailed:
     'Rien n’a été enregistré : la copie à écrire ne correspondait pas, à la relecture, au document affiché. Essayez « Enregistrer sous » pour écrire un nouveau fichier.',
   saveVerifyHint:

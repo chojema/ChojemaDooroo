@@ -18,6 +18,15 @@ export const ko = {
   pdfFailed: 'PDF로 내보내지 못했습니다.',
   imageFailed: '그림 파일로 내보내지 못했습니다.',
   printFailed: '인쇄하지 못했습니다.',
+  exportRangeTitle: '내보낼 쪽',
+  exportRangeAll: '문서 전체 ({count}쪽)',
+  exportRangeCurrent: '현재 쪽 ({page}쪽)',
+  exportRangeCustom: '쪽 범위',
+  exportRangeHint: '예: 1-3, 5',
+  exportRangeInvalid: '범위는 1-3, 5 형식으로 입력하세요.',
+  exportRangeOutside: '1부터 {count}까지의 번호를 입력하세요.',
+  exportRangeConfirm: '내보내기',
+  exportRangeCancel: '취소',
   saveVerifyFailed:
     '저장하지 않았습니다. 저장될 내용을 다시 읽어 보니 화면의 문서와 달랐습니다. "다른 이름으로 저장"으로 새 파일에 저장해 보세요.',
   saveVerifyHint:

@@ -26,6 +26,7 @@ import { MEMO_INSERT_EVENT, memoNoticeOf, type MemoNotice } from './MemoPanel'
 import { MemoSide, MemoToggle, memoPanelInitiallyOpen, rememberMemoPanelOpen } from './MemoSide'
 import { openDocumentsDroppedOn } from './editor-drop'
 import { hwpPresentationKeyOf } from './presentation-keys'
+import { ExportRangeDialog } from './ExportRangeDialog'
 import { gatherPrintJob } from './print-flow'
 import {
   RECOVERY_TICK_MS,
@@ -605,6 +606,11 @@ export default function App() {
   // PDF, page pictures and print asked for by the menu and Ctrl+P: the pages are gathered
   // here, and the main process makes the files or opens the print dialog
   const printingRef = useRef(false)
+  const [exportAsk, setExportAsk] = useState<{
+    pageCount: number
+    currentPage: number
+    answer: (pages: number[] | undefined | null) => void
+  } | null>(null)
   useEffect(
     () =>
       window.hwpApi.onPrintRequest((mode) => {
@@ -614,13 +620,31 @@ export default function App() {
           const failed =
             mode === 'pdf' ? 'pdfFailed' : mode === 'print' ? 'printFailed' : 'imageFailed'
           try {
-            const job = await gatherPrintJob(agentBridge, mode, (done, total) =>
-              setNotice({
-                tone: 'info',
-                key: 'printPreparing',
-                params: { done, total },
-                sticky: true,
-              }),
+            // the system print dialog has its own choice of pages; a one-page document has none
+            let only: number[] | undefined
+            if (mode !== 'print') {
+              const status = await agentBridge.pageStatus()
+              if (status.pageCount > 1) {
+                const pages = await new Promise<number[] | undefined | null>((answer) =>
+                  setExportAsk({ ...status, answer }),
+                )
+                setExportAsk(null)
+                editorRef.current?.element.focus()
+                if (pages === null) return
+                only = pages
+              }
+            }
+            const job = await gatherPrintJob(
+              agentBridge,
+              mode,
+              (done, total) =>
+                setNotice({
+                  tone: 'info',
+                  key: 'printPreparing',
+                  params: { done, total },
+                  sticky: true,
+                }),
+              only,
             )
             setNotice({ tone: 'info', key: 'printSending', sticky: true })
             const result = await window.hwpApi.printPages(job)
@@ -852,6 +876,14 @@ export default function App() {
             onCollapse={() => setMemoOpen(false)}
             onModalOpenChange={setMemoBlocked}
             onNotice={showMemoNotice}
+          />
+        )}
+        {exportAsk && (
+          <ExportRangeDialog
+            pageCount={exportAsk.pageCount}
+            currentPage={exportAsk.currentPage}
+            onConfirm={exportAsk.answer}
+            onCancel={() => exportAsk.answer(null)}
           />
         )}
         <div className="hwp-stage">

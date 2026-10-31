@@ -21,7 +21,7 @@ import {
   sideMm,
   type ImageWindow,
 } from '../src/main/print-document'
-import { gatherPrintJob, sharePictures } from '../src/renderer/print-flow'
+import { gatherPrintJob, parsePageRange, sharePictures } from '../src/renderer/print-flow'
 import type { AgentBridge } from '../src/renderer/ai/agent-bridge'
 
 const require = createRequire(import.meta.url)
@@ -106,6 +106,36 @@ describe('the pages for print', () => {
     for (const page of job.pages) expect(page.svg).toContain('href="ieum-image:0"')
   })
 
+  it('tell how many pages print and which page the caret is on', () => {
+    const { plugin } = open(3)
+    expect(plugin.pageStatus()).toEqual({ pageCount: 3, currentPage: 0 })
+    expect(plugin.printPages(1, 2).pages).toHaveLength(1)
+  })
+
+  it('are gathered for the pages asked for only, in runs, with their numbers', async () => {
+    const asked: [number, number | undefined][] = []
+    const bridge: Pick<AgentBridge, 'printPages'> = {
+      printPages: async (from, end) => {
+        asked.push([from, end])
+        // one page a call within a run: the run is asked for again from where it stopped
+        return { pageCount: 9, from, pages: [{ svg: `<svg>${from}</svg>`, width: 10, height: 10 }] }
+      },
+    }
+    const progress: [number, number][] = []
+    const job = await gatherPrintJob(bridge, 'png', (done, total) => progress.push([done, total]), [1, 2, 5])
+    expect(asked).toEqual([[1, 3], [2, 3], [5, 6]])
+    expect(job.pages.map((page) => page.svg)).toEqual(['<svg>1</svg>', '<svg>2</svg>', '<svg>5</svg>'])
+    expect(job.numbers).toEqual([2, 3, 6])
+    expect(progress.at(-1)).toEqual([3, 3])
+  })
+
+  it('stop when the document shrank below the pages asked for', async () => {
+    const bridge: Pick<AgentBridge, 'printPages'> = {
+      printPages: async (_from) => ({ pageCount: 2, from: 2, pages: [] }),
+    }
+    await expect(gatherPrintJob(bridge, 'pdf', () => {}, [4])).rejects.toThrow(/changed/)
+  })
+
   it('stop when the document changes under them', async () => {
     let count = 4
     const bridge: Pick<AgentBridge, 'printPages'> = {
@@ -120,6 +150,25 @@ describe('the pages for print', () => {
       },
     }
     await expect(gatherPrintJob(bridge, 'print', () => {})).rejects.toThrow(/changed/)
+  })
+})
+
+describe('a range of pages', () => {
+  it('reads pages, spans and open ends into page indexes in order, each once', () => {
+    expect(parsePageRange('2', 9)).toEqual({ pages: [1] })
+    expect(parsePageRange('1-3, 5', 9)).toEqual({ pages: [0, 1, 2, 4] })
+    expect(parsePageRange(' 5 , 3~4,4 ', 9)).toEqual({ pages: [2, 3, 4] })
+    expect(parsePageRange('8-', 9)).toEqual({ pages: [7, 8] })
+    expect(parsePageRange('1,', 9)).toEqual({ pages: [0] })
+  })
+
+  it('refuses what is not a range, and pages the document does not have', () => {
+    for (const text of ['', ' , ', 'abc', '1-2-3', '-3', '5-3', '1.5']) {
+      expect(parsePageRange(text, 9)).toEqual({ error: 'invalid' })
+    }
+    for (const text of ['0', '10', '8-12', '99999999999-']) {
+      expect(parsePageRange(text, 9)).toEqual({ error: 'outside' })
+    }
   })
 })
 
@@ -198,6 +247,9 @@ describe('the printable HTML', () => {
     expect(badJob({ mode: 'pdf', pages: [{ ...page, svg: '<html>' }], images: [] })).toMatch(/page/)
     expect(badJob({ mode: 'pdf', pages: [{ ...page, width: -1 }], images: [] })).toMatch(/size/)
     expect(badJob({ mode: 'pdf', pages: [page], images: [3] })).toMatch(/pictures/)
+    expect(badJob({ mode: 'pdf', pages: [page], images: [], numbers: [2] })).toBeNull()
+    expect(badJob({ mode: 'pdf', pages: [page], images: [], numbers: [1, 2] })).toMatch(/numbers/)
+    expect(badJob({ mode: 'pdf', pages: [page], images: [], numbers: [0] })).toMatch(/numbers/)
     expect(badJob(null)).toMatch(/not a print job/)
   })
 })
@@ -210,6 +262,10 @@ describe('the pages as pictures', () => {
       '/docs/report-01.jpg',
       '/docs/report-02.jpg',
       '/docs/report-03.jpg',
+    ])
+    expect(pagePicturePaths('/docs/a.png', 'png', 2, [3, 120])).toEqual([
+      '/docs/a-003.png',
+      '/docs/a-120.png',
     ])
     const many = pagePicturePaths('/docs/a.png', 'png', 120)
     expect(many[0]).toBe('/docs/a-001.png')

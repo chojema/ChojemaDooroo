@@ -884,8 +884,10 @@ export interface AgentPluginSurface {
     changes: AgentStyleChanges,
     options?: AgentChangeOptions,
   ): AgentStyleResult
-  /** pages for printing from `from`, as many as are drawn in about two seconds */
-  printPages(from: number): AgentPrintPages
+  /** how many pages print, and the 0-based page of the caret */
+  pageStatus(): AgentPageStatus
+  /** pages for printing from `from` up to `end`, as many as are drawn in about two seconds */
+  printPages(from: number, end?: number): AgentPrintPages
   mergeCells(
     table: number,
     from: AgentCellPlace,
@@ -933,6 +935,11 @@ export interface AgentPluginSurface {
 }
 
 /** Pages drawn for printing: SVG, and each page's size in CSS pixels. */
+export interface AgentPageStatus {
+  pageCount: number
+  currentPage: number
+}
+
 export interface AgentPrintPages {
   pageCount: number
   from: number

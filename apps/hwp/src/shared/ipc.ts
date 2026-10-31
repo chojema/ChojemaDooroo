@@ -133,6 +133,8 @@ export interface PrintJob {
   mode: PrintMode
   pages: PrintPage[]
   images: string[]
+  /** The pages' numbers in the document (from 1) when the job is not the whole of it. */
+  numbers?: number[]
 }
 
 export type PrintResult =

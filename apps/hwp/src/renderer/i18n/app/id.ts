@@ -18,6 +18,15 @@ export const id = {
   pdfFailed: 'Dokumen tidak dapat diekspor sebagai PDF.',
   imageFailed: 'Halaman tidak dapat diekspor sebagai gambar.',
   printFailed: 'Dokumen tidak dapat dicetak.',
+  exportRangeTitle: 'Halaman yang Diekspor',
+  exportRangeAll: 'Seluruh dokumen ({count} halaman)',
+  exportRangeCurrent: 'Halaman saat ini (halaman {page})',
+  exportRangeCustom: 'Rentang halaman',
+  exportRangeHint: 'mis. 1-3, 5',
+  exportRangeInvalid: 'Masukkan rentang seperti 1-3, 5.',
+  exportRangeOutside: 'Masukkan nomor halaman dari 1 hingga {count}.',
+  exportRangeConfirm: 'Ekspor',
+  exportRangeCancel: 'Batal',
   saveVerifyFailed:
     'Tidak ada yang disimpan: salinan yang akan ditulis, saat dibaca kembali, tidak sama dengan dokumen di layar. Coba "Simpan Sebagai" untuk menulis file baru.',
   saveVerifyHint:

@@ -18,6 +18,15 @@ export const ms = {
   pdfFailed: 'Dokumen tidak dapat dieksport sebagai PDF.',
   imageFailed: 'Halaman tidak dapat dieksport sebagai imej.',
   printFailed: 'Dokumen tidak dapat dicetak.',
+  exportRangeTitle: 'Halaman untuk Dieksport',
+  exportRangeAll: 'Seluruh dokumen ({count} halaman)',
+  exportRangeCurrent: 'Halaman semasa (halaman {page})',
+  exportRangeCustom: 'Julat halaman',
+  exportRangeHint: 'cth. 1-3, 5',
+  exportRangeInvalid: 'Masukkan julat seperti 1-3, 5.',
+  exportRangeOutside: 'Masukkan nombor halaman dari 1 hingga {count}.',
+  exportRangeConfirm: 'Eksport',
+  exportRangeCancel: 'Batal',
   saveVerifyFailed:
     'Tiada apa-apa disimpan: salinan yang akan ditulis, apabila dibaca semula, tidak sama dengan dokumen pada skrin. Cuba "Simpan Sebagai" untuk menulis fail baharu.',
   saveVerifyHint:

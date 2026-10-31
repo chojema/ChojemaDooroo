@@ -18,6 +18,15 @@ export const ja = {
   pdfFailed: 'PDF として書き出せませんでした。',
   imageFailed: 'ページを画像として書き出せませんでした。',
   printFailed: '印刷できませんでした。',
+  exportRangeTitle: '書き出すページ',
+  exportRangeAll: '文書全体（{count} ページ）',
+  exportRangeCurrent: '現在のページ（{page} ページ）',
+  exportRangeCustom: 'ページ範囲',
+  exportRangeHint: '例: 1-3, 5',
+  exportRangeInvalid: 'ページ範囲は 1-3, 5 の形式で入力してください。',
+  exportRangeOutside: '1 から {count} までのページ番号を入力してください。',
+  exportRangeConfirm: '書き出す',
+  exportRangeCancel: 'キャンセル',
   saveVerifyFailed:
     '保存しませんでした。書き込もうとした内容を読み戻すと、画面の文書と一致しませんでした。「名前を付けて保存」で新しいファイルに保存してみてください。',
   saveVerifyHint:

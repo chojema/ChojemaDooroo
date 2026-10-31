@@ -86,6 +86,8 @@ const SELECTION_COMMAND = 'ext:ieum-selection'
 const WORD_COMMAND = 'ext:ieum-select-word'
 /** The command that draws the marks of this plugin's changes on the pages. */
 const MARK_COMMAND = 'ext:ieum-mark-changes'
+/** The command that reads which page the caret is on. */
+const CARET_PAGE_COMMAND = 'ext:ieum-caret-page'
 /** Most places marked at once: a replace-all over a long document stops here. */
 const MAX_MARKS = 500
 /** How long one call of printPages draws pages for; the bridge gives a call ten seconds. */
@@ -3552,6 +3554,20 @@ export const agentPlugin = {
       // as above
     }
 
+    let caretPage = 0
+    try {
+      host.automation.registerCommand({
+        id: CARET_PAGE_COMMAND,
+        label: 'Read the page of the caret',
+        execute: (services) => {
+          const input = services && services.getInputHandler ? services.getInputHandler() : null
+          caretPage = input?.cursor?.rect?.pageIndex ?? 0
+        },
+      })
+    } catch {
+      // as above
+    }
+
     try {
       host.automation.registerCommand({
         id: WORD_COMMAND,
@@ -4353,20 +4369,37 @@ export const agentPlugin = {
        * through the field; a cell that holds a picture or another object is never written.
        */
       /**
-       * The pages as the editor prints them, from page `from` (0-based): SVG drawn for
+       * How many pages the document prints (the layout printPages uses, which a range is
+       * checked against) and the page of the caret (0-based, as the status bar shows it).
+       */
+      pageStatus: guarded(() => {
+        caretPage = 0
+        try {
+          host.automation.execute(CARET_PAGE_COMMAND)
+        } catch {
+          // a host without commands: the first page
+        }
+        const pageCount = host.read((doc) => withPortableWidths(doc, () => doc.pageCount()))
+        const currentPage = Number.isInteger(caretPage) ? caretPage : 0
+        return { pageCount, currentPage: Math.max(0, Math.min(currentPage, pageCount - 1)) }
+      }),
+
+      /**
+       * The pages as the editor prints them, from page `from` (0-based, up to `end` when given): SVG drawn for
        * print and each page's size in CSS pixels, as many pages as are drawn in about two
        * seconds (always one). Called again from where it stopped until `pageCount`. Pages
        * are laid out with the portable text widths, as the editor's own print does, and the
        * screen's are put back before the call returns.
        */
-      printPages: guarded((from) =>
+      printPages: guarded((from, end) =>
         host.read((doc) =>
           withPortableWidths(doc, () => {
             const pageCount = doc.pageCount()
             const start = Number.isInteger(from) && from > 0 ? Math.min(from, pageCount) : 0
             const began = Date.now()
             const pages = []
-            for (let page = start; page < pageCount; page++) {
+            const stop = Number.isInteger(end) ? Math.min(end, pageCount) : pageCount
+            for (let page = start; page < stop; page++) {
               const info = JSON.parse(doc.getPageInfo(page))
               pages.push({
                 svg: doc.renderPageSvgWithProfile(page, 'print'),

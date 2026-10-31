@@ -18,6 +18,15 @@ export const ru = {
   pdfFailed: 'Не удалось экспортировать документ в PDF.',
   imageFailed: 'Не удалось экспортировать страницы в изображения.',
   printFailed: 'Не удалось напечатать документ.',
+  exportRangeTitle: 'Страницы для экспорта',
+  exportRangeAll: 'Весь документ (страниц: {count})',
+  exportRangeCurrent: 'Текущая страница ({page})',
+  exportRangeCustom: 'Диапазон страниц',
+  exportRangeHint: 'например: 1-3, 5',
+  exportRangeInvalid: 'Введите диапазон в виде 1-3, 5.',
+  exportRangeOutside: 'Введите номера страниц от 1 до {count}.',
+  exportRangeConfirm: 'Экспортировать',
+  exportRangeCancel: 'Отмена',
   saveVerifyFailed:
     'Ничего не сохранено: копия, подготовленная к записи, при обратном чтении не совпала с документом на экране. Попробуйте «Сохранить как», чтобы записать новый файл.',
   saveVerifyHint:

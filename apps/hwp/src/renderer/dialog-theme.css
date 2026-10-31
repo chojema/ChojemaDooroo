@@ -395,3 +395,47 @@
     animation: none;
   }
 }
+
+.export-range {
+  width: min(360px, 100%);
+}
+
+.export-range .memo-modal-body {
+  gap: 10px;
+}
+
+.export-range-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.export-range-option input {
+  margin: 0;
+  accent-color: var(--ieum-dialog-accent);
+}
+
+.export-range-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--ieum-dialog-field-line);
+  border-radius: var(--ieum-dialog-radius);
+  background: var(--ieum-dialog-field-surface);
+  color: var(--ieum-dialog-ink);
+  font: inherit;
+}
+
+.export-range-input:focus-visible {
+  outline: 2px solid var(--ieum-dialog-focus);
+  outline-offset: 1px;
+}
+
+.export-range-input[aria-invalid='true'] {
+  border-color: var(--ieum-dialog-danger);
+}
+
+.export-range .memo-modal-foot {
+  justify-content: flex-end;
+}

@@ -27,11 +27,37 @@ export function sharePictures(svg: string, images: string[], known: Map<string, 
 /** Calls of printPages one job makes at most: a plugin that stops moving must not hang it. */
 const MAX_PRINT_CALLS = 10_000
 
+/**
+ * The page indexes (0-based, in order, each once) a range such as `1-3, 5, 8-` asks for, in
+ * a document of `pageCount` pages.
+ */
+export function parsePageRange(
+  text: string,
+  pageCount: number,
+): { pages: number[] } | { error: 'invalid' | 'outside' } {
+  const pages = new Set<number>()
+  const parts = text.split(/[,;，、]/).map((part) => part.trim()).filter(Boolean)
+  if (parts.length === 0) return { error: 'invalid' }
+  for (const part of parts) {
+    const match = /^(\d+)(?:\s*([-–~])\s*(\d*))?$/.exec(part)
+    if (!match) return { error: 'invalid' }
+    const first = Number(match[1])
+    const last = match[2] ? (match[3] ? Number(match[3]) : pageCount) : first
+    if (first > last && match[3]) return { error: 'invalid' }
+    if (first < 1 || first > pageCount || last > pageCount) return { error: 'outside' }
+    for (let page = first; page <= last; page++) pages.add(page - 1)
+  }
+  return { pages: [...pages].sort((a, b) => a - b) }
+}
+
+/** `only` keeps the job to those page indexes (in order, each once); the job is every page without it. */
 export async function gatherPrintJob(
   bridge: Pick<AgentBridge, 'printPages'>,
   mode: PrintMode,
   onProgress: (done: number, total: number) => void,
+  only?: readonly number[],
 ): Promise<PrintJob> {
+  if (only) return gatherPages(bridge, mode, onProgress, only)
   const pages: PrintPage[] = []
   const images: string[] = []
   const known = new Map<string, number>()
@@ -53,4 +79,35 @@ export async function gatherPrintJob(
     if (batch.pages.length === 0) break
   }
   throw new Error('the pages could not be drawn')
+}
+
+async function gatherPages(
+  bridge: Pick<AgentBridge, 'printPages'>,
+  mode: PrintMode,
+  onProgress: (done: number, total: number) => void,
+  only: readonly number[],
+): Promise<PrintJob> {
+  const pages: PrintPage[] = []
+  const images: string[] = []
+  const known = new Map<string, number>()
+  let total: number | null = null
+  for (let calls = 0; pages.length < only.length; calls++) {
+    if (calls >= MAX_PRINT_CALLS) throw new Error('the pages could not be drawn')
+    const from = only[pages.length]!
+    // up to the end of this unbroken run of pages
+    let run = 1
+    while (only[pages.length + run] === from + run) run++
+    const batch = await bridge.printPages(from, from + run)
+    if (total !== null && batch.pageCount !== total) {
+      throw new Error('the document changed while printing')
+    }
+    total = batch.pageCount
+    if (batch.from !== from) throw new Error('the document changed while printing')
+    if (batch.pages.length === 0) throw new Error('the document changed while printing')
+    for (const page of batch.pages) {
+      pages.push({ ...page, svg: sharePictures(page.svg, images, known) })
+    }
+    onProgress(pages.length, only.length)
+  }
+  return { mode, pages, images, numbers: only.map((page) => page + 1) }
 }

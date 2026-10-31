@@ -18,6 +18,15 @@ export const hi = {
   pdfFailed: 'दस्तावेज़ को PDF के रूप में निर्यात नहीं किया जा सका।',
   imageFailed: 'पृष्ठों को छवियों के रूप में निर्यात नहीं किया जा सका।',
   printFailed: 'दस्तावेज़ प्रिंट नहीं किया जा सका।',
+  exportRangeTitle: 'निर्यात करने वाले पृष्ठ',
+  exportRangeAll: 'पूरा दस्तावेज़ ({count} पृष्ठ)',
+  exportRangeCurrent: 'वर्तमान पृष्ठ (पृष्ठ {page})',
+  exportRangeCustom: 'पृष्ठ सीमा',
+  exportRangeHint: 'उदा. 1-3, 5',
+  exportRangeInvalid: '1-3, 5 जैसी सीमा दर्ज करें।',
+  exportRangeOutside: '1 से {count} तक के पृष्ठ क्रमांक दर्ज करें।',
+  exportRangeConfirm: 'निर्यात करें',
+  exportRangeCancel: 'रद्द करें',
   saveVerifyFailed:
     'कुछ भी सहेजा नहीं गया: लिखी जाने वाली प्रति वापस पढ़ने पर स्क्रीन के दस्तावेज़ से मेल नहीं खाई। नई फ़ाइल में लिखने के लिए "इस रूप में सहेजें" आज़माएँ।',
   saveVerifyHint:

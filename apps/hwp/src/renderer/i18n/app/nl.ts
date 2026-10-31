@@ -18,6 +18,15 @@ export const nl = {
   pdfFailed: 'Het document kon niet als PDF worden geëxporteerd.',
   imageFailed: "De pagina's konden niet als afbeeldingen worden geëxporteerd.",
   printFailed: 'Het document kon niet worden afgedrukt.',
+  exportRangeTitle: "Te exporteren pagina's",
+  exportRangeAll: "Hele document ({count} pagina's)",
+  exportRangeCurrent: 'Huidige pagina (pagina {page})',
+  exportRangeCustom: 'Paginabereik',
+  exportRangeHint: 'bijv. 1-3, 5',
+  exportRangeInvalid: 'Voer een bereik in zoals 1-3, 5.',
+  exportRangeOutside: 'Voer paginanummers van 1 tot en met {count} in.',
+  exportRangeConfirm: 'Exporteren',
+  exportRangeCancel: 'Annuleren',
   saveVerifyFailed:
     'Er is niets opgeslagen: de kopie die zou worden weggeschreven kwam bij het teruglezen niet overeen met het document op het scherm. Probeer "Opslaan als" om een nieuw bestand te schrijven.',
   saveVerifyHint:

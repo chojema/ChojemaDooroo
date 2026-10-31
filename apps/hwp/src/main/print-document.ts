@@ -62,7 +62,7 @@ export function imageFile(dataUrl: string, index: number): { name: string; bytes
 /** Why a job from the renderer is not printed, or null when it may be. */
 export function badJob(job: unknown): string | null {
   if (!job || typeof job !== 'object') return 'not a print job'
-  const { mode, pages, images } = job as Partial<PrintJob>
+  const { mode, pages, images, numbers } = job as Partial<PrintJob>
   if (mode !== 'pdf' && mode !== 'print' && !IMAGE_FORMATS.includes(mode as ImageFormat)) {
     return 'unknown print mode'
   }
@@ -70,6 +70,14 @@ export function badJob(job: unknown): string | null {
   if (pages.length > MAX_PRINT_PAGES) return 'too many pages'
   if (!Array.isArray(images) || images.some((image) => typeof image !== 'string')) {
     return 'bad pictures'
+  }
+  if (
+    numbers !== undefined &&
+    (!Array.isArray(numbers) ||
+      numbers.length !== pages.length ||
+      numbers.some((number) => !Number.isInteger(number) || number < 1))
+  ) {
+    return 'bad page numbers'
   }
   let chars = images.reduce((sum, image) => sum + image.length, 0)
   for (const page of pages as unknown[]) {
@@ -160,17 +168,20 @@ export function pageImageHtml(page: PrintPage, picture: (index: number) => strin
 
 /**
  * The files the pages of a picture export are written to, from the name the user picked:
- * that name for a single page, otherwise numbered from 1 (`report-01.png`…), zero-padded
- * so the files sort in page order.
+ * that name for a single page, otherwise numbered by page (`report-01.png`…; from 1 without
+ * `numbers`), zero-padded so the files sort in page order.
  */
-export function pagePicturePaths(picked: string, format: ImageFormat, count: number): string[] {
+export function pagePicturePaths(
+  picked: string,
+  format: ImageFormat,
+  count: number,
+  numbers?: readonly number[],
+): string[] {
   const base = picked.replace(/\.(png|jpe?g)$/i, '')
   if (count === 1) return [`${base}.${format}`]
-  const digits = Math.max(2, String(count).length)
-  return Array.from(
-    { length: count },
-    (_, index) => `${base}-${String(index + 1).padStart(digits, '0')}.${format}`,
-  )
+  const pages = numbers ?? Array.from({ length: count }, (_, index) => index + 1)
+  const digits = Math.max(2, String(Math.max(...pages)).length)
+  return pages.map((page) => `${base}-${String(page).padStart(digits, '0')}.${format}`)
 }
 
 export type PrintWindow = Pick<BrowserWindow, 'loadFile' | 'destroy'> & {

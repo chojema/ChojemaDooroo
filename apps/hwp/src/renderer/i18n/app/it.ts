@@ -18,6 +18,15 @@ export const it = {
   pdfFailed: 'Impossibile esportare il documento in PDF.',
   imageFailed: 'Impossibile esportare le pagine come immagini.',
   printFailed: 'Impossibile stampare il documento.',
+  exportRangeTitle: 'Pagine da esportare',
+  exportRangeAll: 'Intero documento ({count} pagine)',
+  exportRangeCurrent: 'Pagina corrente (pagina {page})',
+  exportRangeCustom: 'Intervallo di pagine',
+  exportRangeHint: 'es. 1-3, 5',
+  exportRangeInvalid: 'Inserisci un intervallo come 1-3, 5.',
+  exportRangeOutside: 'Inserisci numeri di pagina da 1 a {count}.',
+  exportRangeConfirm: 'Esporta',
+  exportRangeCancel: 'Annulla',
   saveVerifyFailed:
     'Non è stato salvato nulla: la copia da scrivere, riletta, non corrispondeva al documento sullo schermo. Prova «Salva con nome» per scrivere un nuovo file.',
   saveVerifyHint:

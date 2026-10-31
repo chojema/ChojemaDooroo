@@ -54,6 +54,7 @@ const METHODS = [
   'readStyle',
   'createStyle',
   'editStyle',
+  'pageStatus',
   'printPages',
   'formatCells',
   'mergeCells',

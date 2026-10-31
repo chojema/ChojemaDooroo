@@ -199,6 +199,7 @@ const READING_CALLS: ReadonlySet<string> = new Set([
   'listNotes',
   'listStyles',
   'measureTabs',
+  'pageStatus',
   'printPages',
   'reveal',
   'clearMarks',

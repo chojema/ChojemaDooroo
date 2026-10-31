@@ -89,15 +89,56 @@ try {
   const pagePng = join(work, 'pages-01.png')
   const pageJpg = join(work, 'pages-02.jpg')
   const exportedPdf = join(work, 'smoke-pdf.pdf')
-  // each export is waited for to its last file: one asked for while another runs is ignored
+  // an export asked for while the last one finishes is ignored (its files are out before it
+  // ends), so the request is repeated until the export's choice of pages opens
+  const askExport = async (command) => {
+    const form = hwp.locator('form.export-range')
+    for (let tries = 0; tries < 20; tries++) {
+      await hwp.evaluate((command) => window.hwpApi.requestFileCommand(command), command)
+      if (await form.waitFor({ timeout: 1000 }).then(() => true, () => false)) return form
+    }
+    throw new Error(`The export's choice of pages did not open: ${command}`)
+  }
+  // each export is waited for to its last file
   for (const [command, picked, path] of [['png', 'pages.png', join(work, 'pages-02.png')], ['jpg', 'pages.jpg', pageJpg], ['pdf', 'smoke-pdf.pdf', exportedPdf]]) {
     await app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }) }, join(work, picked))
-    await hwp.evaluate((command) => window.hwpApi.requestFileCommand(command), command)
+    const form = await askExport(command)
+    await form.locator('button[type="submit"]').click()
     await waitFile(path)
   }
   assert.ok(existsSync(pagePng) && existsSync(join(work, 'pages-01.jpg')), 'One picture file for each page')
   assert.deepEqual([...readFileSync(pagePng).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47])
   assert.deepEqual([...readFileSync(pageJpg).subarray(0, 2)], [0xff, 0xd8])
+  // The caret's page and a typed range export that page alone, under the picked name.
+  const exportOne = async (picked, choose) => {
+    const path = join(work, picked)
+    await app.evaluate(({ dialog }, path) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: path }) }, path)
+    await choose(await askExport('png'))
+    await waitFile(path)
+    return readFileSync(path)
+  }
+  const secondPage = readFileSync(join(work, 'pages-02.png'))
+  const invalid = await (async () => {
+    const form = await askExport('png')
+    await form.locator('.export-range-input').fill('9')
+    await form.locator('button[type="submit"]').click()
+    await form.getByRole('alert').waitFor()
+    await hwp.screenshot({ path: join(work, 'export-range.png') })
+    await form.locator('button[type="button"]').click()
+    await form.waitFor({ state: 'detached' })
+    return true
+  })()
+  assert.ok(invalid, 'A page the document does not have is refused')
+  const current = await exportOne('current.png', async (form) => {
+    await form.getByRole('radio').nth(1).check()
+    await form.locator('button[type="submit"]').click()
+  })
+  assert.ok(current.equals(secondPage), 'Current page is the page of the caret')
+  const ranged = await exportOne('ranged.png', async (form) => {
+    await form.locator('.export-range-input').fill('2')
+    await form.locator('button[type="submit"]').click()
+  })
+  assert.ok(ranged.equals(secondPage), 'A range exports the pages it names')
   const picture = await app.evaluate(({ nativeImage }, path) => {
     const image = nativeImage.createFromPath(path)
     const bitmap = image.toBitmap()

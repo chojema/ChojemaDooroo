@@ -18,6 +18,15 @@ export const pt = {
   pdfFailed: 'Não foi possível exportar o documento como PDF.',
   imageFailed: 'Não foi possível exportar as páginas como imagens.',
   printFailed: 'Não foi possível imprimir o documento.',
+  exportRangeTitle: 'Páginas a exportar',
+  exportRangeAll: 'Documento inteiro ({count} páginas)',
+  exportRangeCurrent: 'Página atual (página {page})',
+  exportRangeCustom: 'Intervalo de páginas',
+  exportRangeHint: 'ex.: 1-3, 5',
+  exportRangeInvalid: 'Introduza um intervalo como 1-3, 5.',
+  exportRangeOutside: 'Introduza números de página de 1 a {count}.',
+  exportRangeConfirm: 'Exportar',
+  exportRangeCancel: 'Cancelar',
   saveVerifyFailed:
     'Nada foi salvo: a cópia que seria gravada, ao ser relida, não correspondia ao documento na tela. Tente "Salvar como" para gravar um novo arquivo.',
   saveVerifyHint:
