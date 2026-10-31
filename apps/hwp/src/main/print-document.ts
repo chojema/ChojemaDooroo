@@ -147,7 +147,14 @@ export function printableHtml(pages: PrintPage[], picture: (index: number) => st
 export const IMAGE_SCALE = 2
 const JPEG_QUALITY = 90
 
-/** The HTML of one page as a picture: the page fills the window, on white. */
+/**
+ * A row of this color under the page, cut off the picture. The page is one paint with it, so
+ * a frame showing the row is one of the page and not the white of a window yet to draw it.
+ */
+const DRAWN_MARK = '#f0f'
+const DRAWN_MARK_ROWS = 1
+
+/** The HTML of one page as a picture: the page fills the window above the drawn mark, on white. */
 export function pageImageHtml(page: PrintPage, picture: (index: number) => string): string {
   return [
     '<!DOCTYPE html>',
@@ -158,10 +165,11 @@ export function pageImageHtml(page: PrintPage, picture: (index: number) => strin
     '<style>',
     '* { margin: 0; padding: 0; }',
     'html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }',
-    'svg { display: block; width: 100%; height: 100%; }',
+    `svg { display: block; width: 100%; height: calc(100% - ${DRAWN_MARK_ROWS}px); }`,
+    `.drawn { height: ${DRAWN_MARK_ROWS}px; background: ${DRAWN_MARK}; }`,
     '</style>',
     '</head>',
-    `<body>${pageSvg(page, 0, picture)}</body>`,
+    `<body>${pageSvg(page, 0, picture)}<div class="drawn"></div></body>`,
     '</html>',
   ].join('\n')
 }
@@ -196,11 +204,20 @@ export type ImageWindow = Pick<BrowserWindow, 'loadFile' | 'destroy' | 'setConte
 const FRAME_TIMEOUT_MS = 10_000
 const FRAME_POLL_MS = 30
 
+/** Whether the frame shows the drawn mark under a page `height` tall (either byte order). */
+function showsDrawnMark(image: NativeImage, width: number, height: number): boolean {
+  const [a, g, b] = image
+    .crop({ x: Math.floor(width / 2), y: height, width: 1, height: 1 })
+    .toBitmap()
+  return a !== undefined && b !== undefined && g !== undefined && a > 200 && b > 200 && g < 60
+}
+
 /**
- * A frame of the offscreen window's page at this size, drawn after the page loaded, or
- * null when none comes. A hidden window paints only when asked (invalidate), and
- * capturePage on one never settles once it has loaded a second page, so the frames are
- * taken from its 'paint' events.
+ * The page of the offscreen window, `width` by `height` without its drawn mark, or null when
+ * none comes. A hidden window paints only when asked (invalidate), and capturePage on one
+ * never settles once it has loaded a second page, so the frames are taken from its 'paint'
+ * events. A frame counts once it shows the mark and the next one shows the same: a picture
+ * in the page may still be decoding in the first.
  */
 async function drawnFrame(win: ImageWindow, width: number, height: number): Promise<NativeImage | null> {
   const frame: { image: NativeImage | null } = { image: null }
@@ -209,11 +226,19 @@ async function drawnFrame(win: ImageWindow, width: number, height: number): Prom
   }
   win.webContents.on('paint', onPaint)
   try {
+    const seen: { image?: NativeImage; bitmap?: Buffer } = {}
     for (let waited = 0; waited < FRAME_TIMEOUT_MS; waited += FRAME_POLL_MS) {
       win.webContents.invalidate()
       await new Promise((resolve) => setTimeout(resolve, FRAME_POLL_MS))
-      const size = frame.image?.getSize()
-      if (size && size.width === width && size.height === height) return frame.image
+      const image = frame.image
+      const size = image?.getSize()
+      if (!image || image === seen.image) continue
+      if (size?.width !== width || size.height !== height + DRAWN_MARK_ROWS) continue
+      if (!showsDrawnMark(image, width, height)) continue
+      const bitmap = image.toBitmap()
+      if (seen.bitmap?.equals(bitmap)) return image.crop({ x: 0, y: 0, width, height })
+      seen.image = image
+      seen.bitmap = bitmap
     }
     return null
   } finally {
@@ -285,7 +310,7 @@ export function printJobToImages(
       for (const [index, page] of job.pages.entries()) {
         const width = Math.max(1, Math.round(page.width * IMAGE_SCALE))
         const height = Math.max(1, Math.round(page.height * IMAGE_SCALE))
-        win.setContentSize(width, height)
+        win.setContentSize(width, height + DRAWN_MARK_ROWS)
         const htmlPath = join(dir, `page-${index}.html`)
         await writeFile(htmlPath, pageImageHtml(page, picture), 'utf8')
         await win.loadFile(htmlPath)

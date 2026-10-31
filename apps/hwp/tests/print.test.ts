@@ -277,7 +277,9 @@ describe('the pages as pictures', () => {
       { svg: '<svg id="a"><image href="ieum-image:2"/></svg>', width: 10, height: 10 },
       (index) => `image-${index}.png`,
     )
-    expect(html).toContain('<body><svg id="p0-a"><image href="image-2.png"/></svg></body>')
+    expect(html).toContain(
+      '<body><svg id="p0-a"><image href="image-2.png"/></svg><div class="drawn"></div></body>',
+    )
     expect(html).toContain('background: #fff')
     expect(html).toContain("default-src 'none'")
     expect(html).not.toContain('<script')
@@ -285,19 +287,32 @@ describe('the pages as pictures', () => {
 
   /**
    * An offscreen window: each invalidate paints a frame of the current size (none at all
-   * when `paints` is false), and the frames before a load are an empty one.
+   * when `paints` is false), and the frames before a load are an empty one. The first
+   * `whiteFrames` of each load are the white of a window yet to draw the page.
    */
-  function offscreen(paints = true) {
+  function offscreen(paints = true, whiteFrames = 0) {
     const sizes: number[][] = []
     const loaded: string[] = []
-    const state = { destroyed: false, size: [0, 0], loads: 0 }
+    const state = { destroyed: false, size: [0, 0], loads: 0, painted: 0 }
     const listeners = new Set<(event: unknown, dirty: unknown, image: unknown) => void>()
-    const frame = (empty: boolean) => ({
-      isEmpty: () => empty,
-      getSize: () => ({ width: state.size[0], height: state.size[1] }),
-      toPNG: () => Buffer.from(`png ${state.loads}`),
-      toJPEG: (quality: number) => Buffer.from(`jpeg ${quality} ${state.loads}`),
-    })
+    const frame = (empty: boolean) => {
+      const drawn = state.painted++ >= whiteFrames
+      const picture = {
+        toPNG: () => Buffer.from(`png ${state.loads} ${drawn ? 'page' : 'white'}`),
+        toJPEG: (quality: number) =>
+          Buffer.from(`jpeg ${quality} ${state.loads} ${drawn ? 'page' : 'white'}`),
+      }
+      return {
+        isEmpty: () => empty,
+        getSize: () => ({ width: state.size[0], height: state.size[1] }),
+        toBitmap: () => Buffer.from(drawn ? [255, 0, 255, 255] : [255, 255, 255, 255]),
+        crop: (rect: { height: number }) =>
+          rect.height === 1
+            ? { toBitmap: () => Buffer.from(drawn ? [255, 0, 255, 255] : [255, 255, 255, 255]) }
+            : { ...picture, cropped: rect },
+        ...picture,
+      }
+    }
     const win = {
       setContentSize: (width: number, height: number) => {
         sizes.push([width, height])
@@ -306,6 +321,7 @@ describe('the pages as pictures', () => {
       loadFile: async (path: string) => {
         loaded.push(readFileSync(path, 'utf8'))
         state.loads++
+        state.painted = 0
       },
       destroy: () => {
         state.destroyed = true
@@ -342,18 +358,32 @@ describe('the pages as pictures', () => {
       },
     )
     expect(sizes).toEqual([
-      [Math.round(793.7 * IMAGE_SCALE), Math.round(1122.5 * IMAGE_SCALE)],
-      [Math.round(1122.5 * IMAGE_SCALE), Math.round(793.7 * IMAGE_SCALE)],
+      [Math.round(793.7 * IMAGE_SCALE), Math.round(1122.5 * IMAGE_SCALE) + 1],
+      [Math.round(1122.5 * IMAGE_SCALE), Math.round(793.7 * IMAGE_SCALE) + 1],
     ])
     expect(loaded[0]).toContain('id="p0-one"')
     expect(loaded[1]).toContain('id="p0-two"')
     // each page's frame is one drawn after its own load
     expect(saved).toEqual([
-      [0, 'jpeg 90 1'],
-      [1, 'jpeg 90 2'],
+      [0, 'jpeg 90 1 page'],
+      [1, 'jpeg 90 2 page'],
     ])
     expect(state.destroyed).toBe(true)
     expect(listeners.size).toBe(0)
+  })
+
+  it('waits past the white frames of a window yet to draw the page', async () => {
+    const { win } = offscreen(true, 3)
+    const saved: string[] = []
+    await printJobToImages(
+      { mode: 'png', pages: [{ svg: '<svg/>', width: 10, height: 10 }], images: [] },
+      'png',
+      () => win,
+      async (_index, bytes) => {
+        saved.push(bytes.toString())
+      },
+    )
+    expect(saved).toEqual(['png 1 page'])
   })
 
   it('stops at a page that is never drawn, and still closes the window', async () => {
