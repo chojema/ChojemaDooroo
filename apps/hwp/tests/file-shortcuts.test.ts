@@ -96,6 +96,7 @@ vi.mock('@genoffice/file-parse', () => ({
   ATTACHABLE_EXTS: new Set<string>(),
   ATTACHABLE_IMAGE_EXTS: new Set<string>(),
   ATTACHABLE_MAX_BYTES: 25 * 1024 * 1024,
+  attachableMaxBytes: () => 25 * 1024 * 1024,
   ATTACHABLE_IMAGE_MAX_BYTES: 5 * 1024 * 1024,
 }))
 
@@ -195,7 +196,7 @@ describe.skipIf(process.platform === 'darwin')(
       for (const [code, channel, mode] of [
         ['KeyS', 'hwp:save-request', 'save'],
         ['KeyV', 'hwp:save-request', 'saveAs'],
-        ['KeyP', 'hwp:print-request', 'print'],
+        ['KeyP', 'hwp:preview-request', 'print'],
       ] as const) {
         const contents = createHwpView().webContents as unknown as FakeContents
         expect(press(code, alt, contents).preventDefault, code).toHaveBeenCalled()

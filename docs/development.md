@@ -2,7 +2,7 @@
 
 - `apps/desktop`: Chojema Dooroo 전용 창, 탭, 나란히 보기, 설정, 업데이트와 패키징.
 - `apps/hwp`: HWP/HWPX 편집기와 rhwp 연결.
-- `packages`: HWP 텍스트/메모 파싱(`file-parse`), 공용 화면(`ui`), 일렉트론 유틸리티(`electron-utils`), 다국어(`i18n`), 프로젝트 저장소(`project-store`), ZIP 검증(`zip-gate`), AI 도우미(`agent-core`, `ai-provider`, `ai-search`).
+- `packages`: HWP 텍스트/메모 파싱(`file-parse`), 문서 서식 규칙(`doc-rules`), 공용 화면(`ui`), 일렉트론 유틸리티(`electron-utils`), 다국어(`i18n`), 프로젝트 저장소(`project-store`), ZIP 검증(`zip-gate`), AI 도우미(`agent-core`, `ai-provider`, `ai-search`).
 - `vendor/rhwp-core`: rhwp WebAssembly와 재빌드용 패치.
 - `tools`: 라이선스 고지, 버전, 공개 파일 검사와 실제 앱 검증.
 

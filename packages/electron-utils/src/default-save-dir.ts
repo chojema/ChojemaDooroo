@@ -5,7 +5,7 @@
 /// Every editor main module resolves through here so they all honor the same
 /// setting.
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { PRODUCT_NAME } from '@genoffice/i18n'
 
 /** the subset of Electron's `app` needed here (kept structural: this package has no Electron dependency) */
@@ -55,17 +55,38 @@ export function readDefaultSaveDirSetting(settingsPath: string): string | null {
   }
 }
 
+function isDirectory(dir: string): boolean {
+  try {
+    return statSync(dir).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
+ * mkdir -p without `recursive: true`. When Controlled Folder Access blocks a
+ * create in Documents, Windows reports ENOENT although the parent exists, and
+ * Node's recursive mkdirSync retries that forever, freezing the main process
+ * at startup. Creating one level at a time from the nearest existing ancestor
+ * fails fast instead.
+ */
+function createDirLevels(dir: string): void {
+  const missing: string[] = []
+  let current = resolve(dir)
+  while (!isDirectory(current)) {
+    missing.push(current)
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  for (const level of missing.reverse()) mkdirSync(level)
+}
+
 /** true when the directory exists (or could be created) and is writable */
 export function isUsableSaveDir(dir: string): boolean {
   try {
     // only create a missing folder: an existing one needs no write into its parent
-    let exists = false
-    try {
-      exists = statSync(dir).isDirectory()
-    } catch {
-      exists = false
-    }
-    if (!exists) mkdirSync(dir, { recursive: true })
+    if (!isDirectory(dir)) createDirLevels(dir)
     accessSync(dir, constants.W_OK)
     return true
   } catch {

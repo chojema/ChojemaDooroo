@@ -79,6 +79,14 @@ try {
   const filters = await app.evaluate(() => globalThis.__chojemaSaveFilters)
   assert.deepEqual(filters[0].extensions, ['hwpx'])
   await home.getByRole('tab', { name: /smoke.hwpx/ }).waitFor()
+  // The document check opens on the document and closes again.
+  const checkButton = hwp.locator('.hwp-topbar-button')
+  await checkButton.click()
+  const check = hwp.locator('.doc-check')
+  await check.waitFor()
+  await hwp.screenshot({ path: join(work, 'doc-check.png') })
+  await check.locator('.doc-check-close').click()
+  await check.waitFor({ state: 'detached' })
   // A second page, then each page as a picture and the document as a PDF that is
   // brought back in later.
   await paper.click({ position: { x: 140, y: 150 } })
@@ -109,6 +117,15 @@ try {
   assert.ok(existsSync(pagePng) && existsSync(join(work, 'pages-01.jpg')), 'One picture file for each page')
   assert.deepEqual([...readFileSync(pagePng).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47])
   assert.deepEqual([...readFileSync(pageJpg).subarray(0, 2)], [0xff, 0xd8])
+  // Print Preview draws both pages, and print goes through it to the system dialog's side.
+  await hwp.evaluate(() => window.hwpApi.requestFileCommand('preview'))
+  const preview = hwp.locator('.hwp-preview')
+  await preview.waitFor()
+  await preview.locator('.hwp-preview-sheet img').first().waitFor({ timeout: 20000 })
+  assert.match(await preview.locator('.hwp-preview-page-count').innerText(), /2/, 'The preview counts both pages')
+  await hwp.screenshot({ path: join(work, 'preview.png') })
+  await preview.getByRole('button', { name: /닫기|Close/ }).first().click()
+  await preview.waitFor({ state: 'detached' })
   // The caret's page and a typed range export that page alone, under the picked name.
   const exportOne = async (picked, choose) => {
     const path = join(work, picked)

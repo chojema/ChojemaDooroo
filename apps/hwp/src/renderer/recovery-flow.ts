@@ -191,6 +191,7 @@ export function createRecoveryCopier(options: RecoveryCopierOptions): RecoveryCo
 const READING_CALLS: ReadonlySet<string> = new Set([
   'foreignChanges',
   'readText',
+  'documentProfile',
   'findText',
   'listTables',
   'readTable',
@@ -201,6 +202,7 @@ const READING_CALLS: ReadonlySet<string> = new Set([
   'measureTabs',
   'pageStatus',
   'printPages',
+  'previewPage',
   'reveal',
   'clearMarks',
   'installFileMenu',

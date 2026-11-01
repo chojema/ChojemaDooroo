@@ -159,6 +159,7 @@ export function AiPanel({
   onCollapse,
   templateDocument,
   onSkillHandoff,
+  prefill,
 }: {
   /** the document operations of the open editor */
   bridge: AgentBridge
@@ -169,6 +170,8 @@ export function AiPanel({
   templateDocument?: TemplateDocument | null
   /** this tab took a request handed over by the template flow: show the panel */
   onSkillHandoff?: () => void
+  /** a request from the document check: fills the input box, never sends it */
+  prefill?: { text: string; nonce: number } | null
 }): ReactElement {
   const { lang, t } = useI18n()
   const [chat, setChat] = useState<ChatEntry[]>([])
@@ -177,6 +180,13 @@ export function AiPanel({
   chatNowRef.current = chat
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // a request handed over by the document check: it waits in the input box for the user
+  useEffect(() => {
+    if (!prefill) return
+    setPrompt(prefill.text)
+  }, [prefill])
+
   /** an undo of a run is on its way to the editor */
   const [reverting, setReverting] = useState(false)
   /** the editor shows marks over what the last run changed */
@@ -478,6 +488,8 @@ export function AiPanel({
   const settingsRef = useRef<AiSettings | null>(null)
   /** whether generate_image can run, as the main process answers (refreshed on mount and window focus) */
   const imageGenAvailableRef = useRef(false)
+  /** whether a connected AI can look at a picture; null until the main process answers */
+  const imageAnalysisAvailableRef = useRef<boolean | null>(null)
   useEffect(() => {
     let alive = true
     const refresh = () => {
@@ -485,8 +497,10 @@ export function AiPanel({
       Promise.resolve()
         .then(() => window.hwpApi.aiToolCapabilities())
         .then((capabilities) => {
-          if (alive)
+          if (alive) {
             imageGenAvailableRef.current = capabilities?.imageGeneration?.available === true
+            imageAnalysisAvailableRef.current = capabilities?.imageAnalysis?.available ?? null
+          }
         })
         .catch(() => {
           if (alive) imageGenAvailableRef.current = false
@@ -619,6 +633,7 @@ export function AiPanel({
       },
       confirmMemoRemoval: (refusal) => memoGateRef.current!.ask(refusal),
       imageGenAvailable: () => imageGenAvailableRef.current,
+      pictureAnalysisAvailable: () => imageAnalysisAvailableRef.current !== false,
       // the model names an attachment; only files the panel shows can be found
       attachmentPath: (name) =>
         availableAttachmentsRef.current().find((attachment) => attachment.name === name)?.path ??

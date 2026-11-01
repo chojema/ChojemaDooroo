@@ -1,5 +1,13 @@
 export declare const AGENT_PLUGIN_ID: 'ieum-agent'
 
+import type { DocumentProfile } from '@genoffice/doc-rules'
+
+/**
+ * What the document is made of, for the format checks of `@genoffice/doc-rules`. The
+ * editor does not know the file's extension, so the app fills `format` in.
+ */
+export type AgentDocumentProfile = Omit<DocumentProfile, 'format'>
+
 /** One place a searched text occurs. */
 export interface AgentMatch {
   /** 1-based position among all matches, in reading order */
@@ -228,6 +236,15 @@ export type AgentFormatTextResult =
       matches?: AgentMatch[]
     }
   | AgentNoSuchStyle
+
+/** What replaceFont changed: runs of text, and paragraphs holding at least one. */
+export interface AgentReplaceFontResult {
+  ok: true
+  ranges: number
+  paragraphs: number
+  /** the cap stopped it: some text still uses the old font */
+  truncated?: true
+}
 
 export type AgentFormatParagraphResult =
   | {
@@ -479,7 +496,7 @@ export type AgentDeleteTableResult =
   | { ok: false; reason: 'has_objects'; count: number }
 
 /** What a File menu item of the editor asks the app to do. */
-export type AgentFileCommand = 'save' | 'saveAs' | 'pdf' | 'png' | 'jpg' | 'print'
+export type AgentFileCommand = 'save' | 'saveAs' | 'pdf' | 'png' | 'jpg' | 'preview' | 'print'
 
 /** One of the app's commands put into an editor menu by installAppMenu. */
 export interface AgentAppMenuItem {
@@ -745,10 +762,40 @@ export type AgentRefreshTocResult =
 export type AgentUndoResult =
   { ok: boolean; undone: number } | { ok: false; reason: 'changed'; undone: 0 }
 
+/** One picture of the document, as listPictures lists it. */
+export interface AgentPicture {
+  /** 1-based position in reading order; what readPicture takes */
+  picture: number
+  /** image MIME type, for example image/png */
+  type: string
+  /** the page its paragraph starts on, as the document numbers pages; null when unknown */
+  page: number | null
+  /** the text beside it, cut short; empty when its paragraph holds no text */
+  near: string
+  /** the table it sits in, as listTables numbers tables; null when it is in the body text */
+  table: number | null
+}
+
+export interface AgentPictureList {
+  count: number
+  /** more pictures exist than the list holds: `pictures` is the first ones */
+  limited: boolean
+  pictures: AgentPicture[]
+}
+
+export type AgentReadPictureResult =
+  | { ok: true; mime: string; base64: string }
+  /** the number is not in the current list */
+  | { ok: false; reason: 'no_such_picture'; count: number }
+  /** larger than the panel sends to the model */
+  | { ok: false; reason: 'too_large'; bytes: number }
+
 /** What the plugin answers to, by method name (the studio's `plugins.invoke`). */
 export interface AgentPluginSurface {
   foreignChanges(): number
   readText(): string
+  listPictures(): AgentPictureList
+  readPicture(picture: number): AgentReadPictureResult
   findText(find: string): AgentFindResult
   replaceText(
     find: string,
@@ -801,6 +848,8 @@ export interface AgentPluginSurface {
     format: AgentTextFormat,
     options?: AgentChangeOptions,
   ): AgentFormatTextResult
+  /** every run of text whose Hangul font is `from` becomes `to`; one undo step */
+  replaceFont(from: string, to: string): AgentReplaceFontResult
   formatParagraph(
     find: string,
     occurrence: number | null,
@@ -884,10 +933,16 @@ export interface AgentPluginSurface {
     changes: AgentStyleChanges,
     options?: AgentChangeOptions,
   ): AgentStyleResult
+  /** What the document is made of (paragraphs, tables, pictures, fonts); reads only. */
+  documentProfile(): AgentDocumentProfile
   /** how many pages print, and the 0-based page of the caret */
   pageStatus(): AgentPageStatus
   /** pages for printing from `from` up to `end`, as many as are drawn in about two seconds */
   printPages(from: number, end?: number): AgentPrintPages
+  /** one page as the print path draws it, for the preview; `page` is 0-based */
+  previewPage(page: number): AgentPreviewPage
+  /** the first body paragraph that starts on `page`, for Ctrl+Enter in the preview */
+  pageTarget(page: number): AgentPageTarget
   mergeCells(
     table: number,
     from: AgentCellPlace,
@@ -945,6 +1000,31 @@ export interface AgentPrintPages {
   from: number
   pages: { svg: string; width: number; height: number }[]
 }
+
+/** One page for the print preview, with the count it belongs to. */
+export interface AgentPreviewPage {
+  pageCount: number
+  page: number
+  svg: string
+  width: number
+  height: number
+  /** the page's text margins, in CSS pixels, for the preview's margin guide */
+  margins: { left: number; top: number; right: number; bottom: number }
+}
+
+export type AgentPageTarget =
+  | {
+      ok: true
+      page: number
+      target: {
+        kind: 'body_paragraph'
+        section: number
+        paragraph: number
+        charOffset: 0
+        length: number
+      }
+    }
+  | { ok: false; reason: 'no_paragraph' }
 
 /** The part of the studio's plugin host this plugin uses. */
 export interface AgentPluginHost {

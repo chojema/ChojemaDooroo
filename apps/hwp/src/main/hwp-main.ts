@@ -64,6 +64,7 @@ import type {
   MeasuredTab,
   MemoPathStep,
   MemoSnapshot,
+  PreviewAction,
   PrintJob,
   PrintMode,
   PrintResult,
@@ -292,9 +293,18 @@ export async function requestHwpClose(
  * keystroke behind, and Ctrl+S right after typing must still save. The
  * renderer asks the editor itself and declines a save with nothing to write.
  */
-/** The File menu or Ctrl+P: the renderer gathers the pages and comes back with printPages. */
+/** The File menu's PDF export: the renderer gathers the pages and comes back with printPages. */
 export function requestHwpPrint(contents: WebContents, mode: PrintMode): void {
   if (!contents.isDestroyed()) contents.send(HWP_CHANNELS.printRequest, mode)
+}
+
+/**
+ * File > Print / Print Preview and Ctrl+P: the renderer opens the preview (and
+ * prints from it when it is already open). The preview draws the same pages the
+ * print job will send, so the system dialog only opens after the user has seen them.
+ */
+export function requestHwpPreview(contents: WebContents, action: PreviewAction): void {
+  if (!contents.isDestroyed()) contents.send(HWP_CHANNELS.previewRequest, action)
 }
 
 /** A hidden window for printing: no preload, no scripts, sandboxed. */
@@ -785,7 +795,9 @@ function registerHwpIpc(): void {
   // the editor's File menu: the same requests as Ctrl+S and Ctrl+P, so one path saves
   ipcMain.on(HWP_CHANNELS.fileCommand, (e, command: unknown) => {
     if (command === 'save' || command === 'saveAs') void requestHwpSave(e.sender, command)
-    else if (command === 'pdf' || command === 'print' || IMAGE_FORMATS.includes(command as ImageFormat)) {
+    else if (command === 'preview') requestHwpPreview(e.sender, 'open')
+    else if (command === 'print') requestHwpPreview(e.sender, 'print')
+    else if (command === 'pdf' || IMAGE_FORMATS.includes(command as ImageFormat)) {
       requestHwpPrint(e.sender, command as PrintMode)
     }
     else if ((APP_COMMANDS as readonly unknown[]).includes(command)) runtime.appCommand?.(e.sender, command as AppCommand)
@@ -876,7 +888,7 @@ function installFileShortcuts(wc: WebContents): void {
     }
     if (input.code === 'KeyP' && !input.shift) {
       event.preventDefault()
-      requestHwpPrint(wc, 'print')
+      requestHwpPreview(wc, 'print')
       return
     }
     if (input.code !== 'KeyS') return
@@ -917,7 +929,7 @@ export function hancomFileKey(
       void requestHwpSave(wc, 'saveAs')
       return true
     case 'KeyP':
-      requestHwpPrint(wc, 'print')
+      requestHwpPreview(wc, 'print')
       return true
     default:
       return false

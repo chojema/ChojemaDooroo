@@ -19,6 +19,20 @@ export const AGENT_PLUGIN_ID = 'ieum-agent'
 
 /** Matches listed back to the caller when a search is ambiguous. */
 const MAX_LISTED_MATCHES = 20
+/** Text runs one replaceFont call changes; beyond this it says it stopped early. */
+const MAX_FONT_RANGES = 5000
+/** Paragraphs one documentProfile call reads; beyond this the profile says it is partial. */
+const MAX_PROFILE_PARAGRAPHS = 20000
+/** Tables one documentProfile call reports. */
+const MAX_PROFILE_TABLES = 500
+/** Cells one table reports to the merge check. */
+const MAX_PROFILE_CELLS = 2000
+/** Character-shape reads one documentProfile call makes, body and cells together. */
+const MAX_PROFILE_SHAPES = 60000
+/** Cell paragraphs one documentProfile call reads fonts from. */
+const MAX_PROFILE_CELL_PARAGRAPHS = 4000
+/** Pictures one documentProfile call reports. */
+const MAX_PROFILE_PICTURES = 100
 /** Characters of surrounding text shown with each listed match. */
 const CONTEXT_CHARS = 30
 /** Most history steps one undo call takes back. */
@@ -45,6 +59,14 @@ const MAX_SPLIT = 10
 const MAX_FORMATTED_CELLS = 500
 /** Rows or columns one call adds to or removes from a table. */
 const MAX_TABLE_LINES = 50
+/** Pictures one listPictures call lists. */
+const MAX_LISTED_PICTURES = 100
+/** Largest picture readPicture hands back to the AI panel, in bytes. */
+const MAX_PICTURE_BYTES = 10 * 1024 * 1024
+/** Characters of the text around a picture shown with it in the list. */
+const PICTURE_CONTEXT_CHARS = 60
+/** Objects tried in one cell paragraph when looking for a picture (the engine does not list them). */
+const PICTURE_CELL_CONTROLS = 8
 /** Cells one checkBoxes call ticks. */
 const MAX_CHECKED_CELLS = 400
 /**
@@ -78,12 +100,17 @@ const FILE_MENU = [
   { command: 'pdf', id: 'ext:ieum-export-pdf' },
   { command: 'png', id: 'ext:ieum-export-png' },
   { command: 'jpg', id: 'ext:ieum-export-jpg' },
+  { command: 'preview', id: 'ext:ieum-preview' },
   { command: 'print', id: 'ext:ieum-print', shortcut: 'Ctrl+P' },
 ]
 /** The command that reads what the user has selected in the editor. */
 const SELECTION_COMMAND = 'ext:ieum-selection'
 /** The command that selects the word under the caret (a double click in the page). */
 const WORD_COMMAND = 'ext:ieum-select-word'
+/** The command that selects the paragraph under the caret (a triple click in the page). */
+const PARAGRAPH_COMMAND = 'ext:ieum-select-paragraph'
+/** The command that keeps a drag begun with a double click on whole words. */
+const WORD_DRAG_COMMAND = 'ext:ieum-word-drag'
 /** The command that draws the marks of this plugin's changes on the pages. */
 const MARK_COMMAND = 'ext:ieum-mark-changes'
 /** The command that reads which page the caret is on. */
@@ -92,6 +119,16 @@ const CARET_PAGE_COMMAND = 'ext:ieum-caret-page'
 const MAX_MARKS = 500
 /** How long one call of printPages draws pages for; the bridge gives a call ten seconds. */
 const PRINT_BATCH_MS = 2000
+
+/** One page as the print path draws it: the SVG and its size in CSS pixels. */
+function printPageOf(doc, page) {
+  const info = JSON.parse(doc.getPageInfo(page))
+  return {
+    svg: doc.renderPageSvgWithProfile(page, 'print'),
+    width: info.width,
+    height: info.height,
+  }
+}
 /**
  * How a mark looks: a light fill over the changed text and a line under it, warm so it is
  * not taken for the editor's blue selection. The page is paper white in every theme.
@@ -792,33 +829,172 @@ function wordAt(text, offset) {
   return { start, end }
 }
 
+/** An engine answer the bridge hands back either parsed or as JSON. */
+const answerOf = (value) => (typeof value === 'string' ? parse(value) : value)
+
 /**
- * Select the word the caret is in, the way a double click does in Hangul and every other
- * editor; the studio's own double click only opens headers, text boxes and objects. Leaves
- * the editor alone while it is in one of those modes.
+ * The caret's paragraph, wherever the caret is: the body or a table cell, a header or footer
+ * being edited, or a footnote being edited. `text` is the paragraph's text and `offset` the
+ * caret's place in it; `select(from, to)` selects from one such place's offset to another's,
+ * `from` staying the anchor. Null in a mode with no text caret (an object, a cell block).
  */
-function selectWord(services, readText) {
+function caretParagraph(services, readText) {
   const input = services && services.getInputHandler ? services.getInputHandler() : null
   const cursor = input ? input.cursor : null
-  if (!cursor || !cursor.getPosition) return false
-  const elsewhere = [
-    'isInPictureObjectSelection',
-    'isInHeaderFooter',
-    'isInCellSelectionMode',
-    'isInFootnote',
-  ].some((mode) => typeof cursor[mode] === 'function' && cursor[mode]())
-  if (elsewhere) return false
+  if (!cursor || !cursor.getPosition) return null
+  const elsewhere = ['isInPictureObjectSelection', 'isInCellSelectionMode'].some(
+    (mode) => typeof cursor[mode] === 'function' && cursor[mode](),
+  )
+  if (elsewhere) return null
+  if (typeof cursor.isInHeaderFooter === 'function' && cursor.isInHeaderFooter()) {
+    const target = {
+      sectionIdx: cursor.hfSectionIdx,
+      isHeader: cursor.headerFooterMode === 'header',
+      applyTo: cursor.hfApplyTo,
+    }
+    const para = cursor.hfParaIdx
+    const info = answerOf(
+      services.wasm.getHeaderFooterParaInfo(
+        target.sectionIdx,
+        target.isHeader,
+        target.applyTo,
+        para,
+      ),
+    )
+    return {
+      input,
+      kind: 'header',
+      key: `hf:${target.sectionIdx}:${target.isHeader}:${target.applyTo}:${para}`,
+      text: String(info?.text ?? ''),
+      offset: cursor.hfCharOffset,
+      at: (offset) => ({ ...target, paraIdx: para, charOffset: offset }),
+      select: (from, to) =>
+        cursor.selectHeaderFooterRange(
+          from.at(from.offset),
+          to.at(to.offset),
+          cursor.hfPreviewPage,
+        ),
+      forward: () => {
+        const ordered = cursor.getHeaderFooterSelectionOrdered?.()
+        return (
+          !ordered ||
+          (ordered.end.paraIdx === cursor.hfParaIdx &&
+            ordered.end.charOffset === cursor.hfCharOffset)
+        )
+      },
+    }
+  }
+  if (typeof cursor.isInFootnote === 'function' && cursor.isInFootnote()) {
+    const para = cursor.fnInnerParaIdx
+    const info = answerOf(
+      services.wasm.getFootnoteInfo(cursor.fnSectionIdx, cursor.fnParaIdx, cursor.fnControlIdx),
+    )
+    return {
+      input,
+      kind: 'footnote',
+      key: `fn:${cursor.fnSectionIdx}:${cursor.fnParaIdx}:${cursor.fnControlIdx}:${para}`,
+      text: String(info?.texts?.[para] ?? ''),
+      offset: cursor.fnCharOffset,
+      at: (offset) => ({ fnParaIdx: para, charOffset: offset }),
+      select: (from, to) => {
+        cursor.clearSelection()
+        cursor.setFnCursorPosition(from.at(from.offset).fnParaIdx, from.offset)
+        cursor.setFnAnchor()
+        cursor.setFnCursorPosition(to.at(to.offset).fnParaIdx, to.offset)
+        return true
+      },
+      forward: () => {
+        const ordered = cursor.getFootnoteSelectionOrdered?.()
+        return (
+          !ordered ||
+          (ordered.end.fnParaIdx === cursor.fnInnerParaIdx &&
+            ordered.end.charOffset === cursor.fnCharOffset)
+        )
+      },
+    }
+  }
   const position = cursor.getPosition()
   const at = endOf(position)
-  if (!at) return false
-  const word = wordAt(readText(at), at.offset)
+  if (!at) return null
+  return {
+    input,
+    kind: 'body',
+    key: placeKey({ ...at, offset: 0, length: 0 }),
+    text: readText(at),
+    offset: at.offset,
+    at: (offset) => ({ ...position, charOffset: offset }),
+    select: (from, to) => {
+      cursor.clearSelection()
+      cursor.moveTo(from.at(from.offset))
+      cursor.setAnchor()
+      cursor.moveTo(to.at(to.offset))
+      return true
+    },
+    forward: () => {
+      const ordered = cursor.getSelectionOrdered?.()
+      if (!ordered) return true
+      const now = cursor.getPosition()
+      return ['sectionIndex', 'paragraphIndex', 'cellIndex', 'cellParaIndex', 'charOffset'].every(
+        (key) => ordered.end[key] === now[key],
+      )
+    },
+  }
+}
+
+/** Select from one offset of a caret paragraph to another and show it. */
+function selectIn(place, start, end) {
+  const done = place.select({ ...place, offset: start }, { ...place, offset: end })
+  if (done !== false && place.input.updateCaret) place.input.updateCaret()
+  return done !== false
+}
+
+/**
+ * Select the word the caret is in, the way a double click does in Hangul and every other
+ * editor; the studio's own double click only opens headers, text boxes and objects. Works in
+ * the body, in cells, and in a header, footer or footnote being edited.
+ */
+function selectWord(services, readText) {
+  const place = caretParagraph(services, readText)
+  if (!place) return false
+  const word = wordAt(place.text, place.offset)
   if (!word) return false
-  cursor.clearSelection()
-  cursor.moveTo({ ...position, charOffset: word.start })
-  cursor.setAnchor()
-  cursor.moveTo({ ...position, charOffset: word.end })
-  if (input.updateCaret) input.updateCaret()
-  return true
+  return selectIn(place, word.start, word.end)
+}
+
+/** Select the whole paragraph the caret is in, as a triple click does in Hangul. */
+function selectParagraph(services, readText) {
+  const place = caretParagraph(services, readText)
+  if (!place || place.text.length === 0) return false
+  return selectIn(place, 0, place.text.length)
+}
+
+/**
+ * A drag begun with a double click selects whole words, as in Hangul: `start` notes the word
+ * the drag began on, `move` (after each of the studio's own drag steps, which put the
+ * selection's end under the pointer) widens both ends to word boundaries. Returns the drag
+ * state, with `widened` once the selection reached past its first word.
+ */
+function wordDrag(services, readText, drag, phase) {
+  const place = caretParagraph(services, readText)
+  if (!place) return phase === 'start' ? null : drag
+  if (phase === 'start') {
+    const word = wordAt(place.text, place.offset)
+    return word ? { place, start: word.start, end: word.end, widened: false } : null
+  }
+  // a paragraph of another kind (out of a header into the body): the studio's selection stays
+  if (!drag || place.kind !== drag.place.kind) return drag
+  const samePara = place.key === drag.place.key
+  if (samePara && place.offset >= drag.start && place.offset <= drag.end) {
+    selectIn(drag.place, drag.start, drag.end)
+    return drag
+  }
+  const forward = samePara ? place.offset > drag.end : place.forward()
+  const word = wordAt(place.text, place.offset) ?? { start: place.offset, end: place.offset }
+  const done = forward
+    ? drag.place.select({ ...drag.place, offset: drag.start }, { ...place, offset: word.end })
+    : drag.place.select({ ...drag.place, offset: drag.end }, { ...place, offset: word.start })
+  if (done !== false && place.input.updateCaret) place.input.updateCaret()
+  return { ...drag, widened: true }
 }
 
 const placeKey = (place) =>
@@ -941,9 +1117,30 @@ function replaceHit(doc, hit, replacement) {
   }
   const last = path[path.length - 1]
   if (path.length === 1 && typeof doc.replaceTextInCellDeferredPagination === 'function') {
-    // one engine call keeps a memo on the replaced text. It takes up to eight characters
-    // (code points), so a longer replacement is the head in that call and the rest typed
-    // right after it; the engine counts its offsets in characters, not UTF-16 units.
+    // one engine call keeps a memo on the replaced text. It removes and puts in up to eight
+    // characters (code points) each, so a longer match is first worn down from its end,
+    // eight characters to one per call (a plain delete would take a memo that lies wholly
+    // in the part it removes), and a longer replacement is the head in the last call and
+    // the rest typed right after it. The engine counts its offsets (and the match's) in
+    // characters, not UTF-16 units.
+    let removed = hit.length
+    while (removed > MAX_CELL_REPLACE_CHARS) {
+      const start = removed - MAX_CELL_REPLACE_CHARS
+      expectOk(
+        doc.replaceTextInCellDeferredPagination(
+          hit.sec,
+          hit.para,
+          last.controlIndex,
+          last.cellIndex,
+          last.cellParaIndex,
+          hit.charOffset + start,
+          MAX_CELL_REPLACE_CHARS,
+          ' ',
+        ),
+        'replace',
+      )
+      removed = start + 1
+    }
     const head = cellReplaceHead(replacement)
     const headLength = Array.from(head).length
     const total = Array.from(replacement).length
@@ -955,7 +1152,7 @@ function replaceHit(doc, hit, replacement) {
         last.cellIndex,
         last.cellParaIndex,
         hit.charOffset,
-        hit.length,
+        removed,
         head,
       ),
       'replace',
@@ -1956,6 +2153,149 @@ function textOf(doc) {
 }
 
 /**
+ * The pictures of the document in reading order, with the text beside each one: first the
+ * pictures of body paragraphs, then those inside table cells. A picture in a text box, a
+ * header, a footer or the page background is not reached this way and is not listed. `sec`
+ * and `para` are the body paragraph that holds it, `control` its place among that
+ * paragraph's objects: the engine addresses the image by them (and by `cellPath` inside a
+ * table).
+ */
+function picturesOf(doc) {
+  const pictures = []
+  const sections = doc.getSectionCount()
+  for (let sec = 0; sec < sections && pictures.length < MAX_LISTED_PICTURES; sec++) {
+    const paragraphs = doc.getParagraphCount(sec)
+    for (let para = 0; para < paragraphs && pictures.length < MAX_LISTED_PICTURES; para++) {
+      let positions
+      try {
+        positions = parse(doc.getControlTextPositions(sec, para))
+      } catch {
+        continue
+      }
+      for (let control = 0; control < positions.length; control++) {
+        let mime
+        try {
+          mime = doc.getControlImageMime(sec, para, '[]', control)
+        } catch {
+          continue // not a picture: a table, a field, a section definition
+        }
+        if (!mime.startsWith('image/')) continue
+        pictures.push(pictureAt(doc, sec, para, control, positions[control], mime))
+      }
+    }
+  }
+  // Pictures inside table cells: the engine does not list the objects of a cell paragraph,
+  // so each cell paragraph is asked for the objects a picture can sit in. A form's photo or
+  // seal is usually there rather than in the body text.
+  if (pictures.length >= MAX_LISTED_PICTURES) return pictures
+  const { tables } = tablesOf(doc)
+  tables.forEach((table, index) => {
+    if (pictures.length >= MAX_LISTED_PICTURES) return
+    for (let cell = 0; cell < table.cells; cell++) {
+      let count
+      try {
+        count = doc.getCellParagraphCountByPath(
+          table.sec,
+          table.para,
+          JSON.stringify(cellAt(table.path, cell, 0)),
+        )
+      } catch {
+        continue
+      }
+      for (let k = 0; k < count && pictures.length < MAX_LISTED_PICTURES; k++) {
+        const cellPath = cellAt(table.path, cell, k)
+        for (let control = 0; control < PICTURE_CELL_CONTROLS; control++) {
+          let mime
+          try {
+            mime = doc.getControlImageMime(table.sec, table.para, JSON.stringify(cellPath), control)
+          } catch {
+            continue
+          }
+          if (!mime.startsWith('image/')) continue
+          pictures.push(
+            pictureAt(doc, table.sec, table.para, control, 0, mime, {
+              table: index + 1,
+              cell,
+              cellPath,
+            }),
+          )
+        }
+      }
+    }
+  })
+  return pictures
+}
+
+/**
+ * One picture as picturesOf lists it: where it is and the words to recognize it by. `cell`
+ * names the table and cell it sits in (table cells only); its text is read from the cell.
+ */
+function pictureAt(doc, sec, para, control, offset, mime, cell = null) {
+  let near = ''
+  try {
+    if (cell) {
+      const json = JSON.stringify(cell.cellPath)
+      const length = doc.getCellParagraphLengthByPath(sec, para, json)
+      if (length > 0) {
+        near = clip(
+          squash(
+            doc.getTextInCellByPath(
+              sec,
+              para,
+              json,
+              0,
+              Math.min(length, PICTURE_CONTEXT_CHARS * 2),
+            ),
+          ),
+          PICTURE_CONTEXT_CHARS * 2,
+        )
+      }
+    } else {
+      const length = doc.getParagraphLength(sec, para)
+      const start = Math.max(0, offset - PICTURE_CONTEXT_CHARS)
+      const count = Math.min(length - start, PICTURE_CONTEXT_CHARS * 2)
+      if (count > 0) {
+        near = clip(squash(doc.getTextRange(sec, para, start, count)), PICTURE_CONTEXT_CHARS * 2)
+      }
+    }
+  } catch {
+    // the words are a courtesy; the picture itself is still listed
+  }
+  // the page the paragraph starts on, numbered as the document numbers its pages
+  let page = null
+  try {
+    const at = parse(doc.getPageOfPosition(sec, para))
+    if (at.ok && Number.isInteger(at.page)) {
+      const info = parse(doc.getPageInfo(at.page))
+      page = Number.isInteger(info.pageNumber) ? info.pageNumber : at.page + 1
+    }
+  } catch {
+    // no page: the list still names the picture
+  }
+  return {
+    sec,
+    para,
+    control,
+    offset,
+    mime,
+    near,
+    page,
+    table: cell ? cell.table : null,
+    cellPath: cell ? cell.cellPath : null,
+  }
+}
+
+/** Base64 of picture bytes, a chunk at a time so a large picture does not overflow the stack. */
+function base64Of(bytes) {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
+/**
  * A table is named by a path like a cell is: one entry per nesting level, the last one
  * holding the table's place among the objects of its paragraph. This is the address of
  * paragraph `k` of cell `cell` of that table.
@@ -2190,6 +2530,267 @@ function paragraphsOf(box) {
   const count = box.count()
   for (let k = 0; k < count; k++) texts.push(box.text(k, box.length(k)))
   return texts
+}
+
+/** The text of one body paragraph, folded to one line, without control characters. */
+function paragraphTextOf(doc, sec, para) {
+  try {
+    const length = doc.getParagraphLength(sec, para)
+    if (length <= 0) return ''
+    return foldText(doc.getTextRange(sec, para, 0, length))
+  } catch {
+    return ''
+  }
+}
+
+function foldText(text) {
+  return (
+    String(text)
+      // eslint-disable-next-line no-control-regex -- control characters are what this folds away
+      .replace(/[\u0000-\u001f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+}
+
+/**
+ * The closest text above a paragraph, skipping empty lines: Korean reports put a title
+ * line, a blank line and the table under it, so a blank line is not "no title".
+ */
+function textAbove(doc, sec, para, textAt) {
+  const own = textAt(sec, para)
+  if (own) return own
+  for (let k = para - 1; k >= 0; k--) {
+    const above = textAt(sec, k)
+    if (above) return above
+  }
+  return ''
+}
+
+/** The Hangul font name of a character shape, or '' when the engine gave none. */
+function hangulFontOf(props) {
+  const families = props && Array.isArray(props.fontFamilies) ? props.fontFamilies : []
+  const name = typeof families[0] === 'string' ? families[0] : ''
+  return name.trim()
+}
+
+/**
+ * What the document is made of, for the format checks of `@genoffice/doc-rules`: the
+ * paragraphs, the tables with their cells, the pictures, and every character shape in use
+ * with the fonts it names. Reads only — it never changes the document, and it calls no
+ * model. A cap that is reached sets `truncated`, so the panel can say it saw part of it.
+ */
+function profileOf(doc) {
+  const shapes = new Map()
+  const paragraphs = []
+  const tables = []
+  const pictures = []
+  const texts = new Map()
+  let truncated = false
+  let shapeReads = 0
+  let cellParagraphs = 0
+
+  const textAt = (sec, para) => {
+    const key = `${sec}:${para}`
+    let text = texts.get(key)
+    if (text === undefined) {
+      text = paragraphTextOf(doc, sec, para)
+      texts.set(key, text)
+    }
+    return text
+  }
+
+  /** One character shape seen at a place: its fonts, how often it is used, and where first. */
+  const noteShape = (props, anchor) => {
+    const id = props && props.charShapeId != null ? String(props.charShapeId) : ''
+    const fonts = Array.isArray(props && props.fontFamilies)
+      ? props.fontFamilies.filter((name) => typeof name === 'string' && name.trim() !== '')
+      : typeof (props && props.fontFamily) === 'string' && props.fontFamily.trim() !== ''
+        ? [props.fontFamily]
+        : []
+    let entry = shapes.get(id)
+    if (!entry) {
+      entry = { id, fonts: [...new Set(fonts)], uses: 0 }
+      shapes.set(id, entry)
+    }
+    entry.uses += 1
+    if (!entry.first) entry.first = anchor
+  }
+
+  /** The character shapes of one range of one paragraph, body or cell. */
+  const noteRuns = (runs, propsAt, anchor) => {
+    for (const run of Array.isArray(runs) ? runs : []) {
+      if (shapeReads >= MAX_PROFILE_SHAPES) {
+        truncated = true
+        return
+      }
+      shapeReads += 1
+      try {
+        noteShape(parse(propsAt(run.startOffset ?? 0)), anchor)
+      } catch {
+        // a shape the engine will not read is left out of the font check
+      }
+    }
+  }
+
+  const sections = doc.getSectionCount()
+  for (let sec = 0; sec < sections; sec++) {
+    const count = doc.getParagraphCount(sec)
+    for (let para = 0; para < count; para++) {
+      if (paragraphs.length >= MAX_PROFILE_PARAGRAPHS) {
+        truncated = true
+        break
+      }
+      paragraphs.push({ index: para, section: sec, text: textAt(sec, para) })
+      let length
+      try {
+        length = doc.getParagraphLength(sec, para)
+      } catch {
+        length = 0
+      }
+      if (length <= 0) continue
+      let runs
+      try {
+        runs = parse(doc.getCharShapeRuns(sec, para, 0, length))
+      } catch {
+        runs = []
+      }
+      noteRuns(runs, (offset) => doc.getCharPropertiesAt(sec, para, offset), { section: sec, para })
+    }
+    if (paragraphs.length >= MAX_PROFILE_PARAGRAPHS) break
+  }
+
+  const found = tablesOf(doc)
+  if (found.partial) truncated = true
+  if (found.tables.length > MAX_PROFILE_TABLES) truncated = true
+  for (const table of found.tables.slice(0, MAX_PROFILE_TABLES)) {
+    const cells = []
+    try {
+      for (const cell of gridOf(doc, table)) {
+        if (cells.length >= MAX_PROFILE_CELLS) {
+          truncated = true
+          break
+        }
+        cells.push({ row: cell.row, col: cell.col, rowSpan: cell.rowSpan, colSpan: cell.colSpan })
+      }
+    } catch {
+      // a table whose cells the engine will not read is reported without them
+    }
+    const info = {
+      index: tables.length,
+      anchor: { section: table.sec, para: table.para, path: table.path },
+      rows: table.rows,
+      cols: table.cols,
+      // a table inside a cell is part of that cell's content: it has no title of its own
+      titleAbove: table.parent === null ? textAbove(doc, table.sec, table.para, textAt) : '',
+      nested: table.parent !== null,
+      cells,
+    }
+    // a one-cell table may be a title box: its text is what the check reports
+    if (table.rows === 1 && table.cols === 1 && cells[0]) {
+      try {
+        const cellPath = cellAt(table.path, 0, 0)
+        const length = doc.getCellParagraphLengthByPath(
+          table.sec,
+          table.para,
+          JSON.stringify(cellPath),
+        )
+        const text =
+          length > 0
+            ? doc.getTextInCellByPath(table.sec, table.para, JSON.stringify(cellPath), 0, length)
+            : ''
+        cells[0].text = foldText(text).slice(0, 80)
+      } catch {
+        // no text to report
+      }
+    }
+    tables.push(info)
+
+    // the fonts inside the table, cell by cell: a form's text is mostly in cells
+    for (
+      let cell = 0;
+      cell < table.cells &&
+      shapeReads < MAX_PROFILE_SHAPES &&
+      cellParagraphs < MAX_PROFILE_CELL_PARAGRAPHS;
+      cell++
+    ) {
+      let count
+      try {
+        count = doc.getCellParagraphCountByPath(
+          table.sec,
+          table.para,
+          JSON.stringify(cellAt(table.path, cell, 0)),
+        )
+      } catch {
+        continue
+      }
+      for (let k = 0; k < count && shapeReads < MAX_PROFILE_SHAPES; k++) {
+        if (cellParagraphs >= MAX_PROFILE_CELL_PARAGRAPHS) {
+          truncated = true
+          break
+        }
+        cellParagraphs += 1
+        const path = cellAt(table.path, cell, k)
+        const json = JSON.stringify(path)
+        let length
+        try {
+          length = doc.getCellParagraphLengthByPath(table.sec, table.para, json)
+        } catch {
+          length = 0
+        }
+        if (length <= 0) continue
+        let runs
+        try {
+          runs = parse(doc.getCharShapeRunsInCellByPath(table.sec, table.para, json, 0, length))
+        } catch {
+          runs = []
+        }
+        noteRuns(
+          runs,
+          (offset) => doc.getCellCharPropertiesAtByPath(table.sec, table.para, json, offset),
+          { section: table.sec, para: table.para, path },
+        )
+      }
+    }
+  }
+
+  // the body's pictures, in reading order; a picture inside a cell belongs to that cell
+  for (let sec = 0; sec < doc.getSectionCount(); sec++) {
+    const count = doc.getParagraphCount(sec)
+    for (let para = 0; para < count && pictures.length < MAX_PROFILE_PICTURES; para++) {
+      let positions
+      try {
+        positions = parse(doc.getControlTextPositions(sec, para))
+      } catch {
+        positions = []
+      }
+      for (let control = 0; control < positions.length; control++) {
+        if (pictures.length >= MAX_PROFILE_PICTURES) break
+        let mime
+        try {
+          mime = doc.getControlImageMime(sec, para, '[]', control)
+        } catch {
+          continue // not a picture: a table, a field, a section definition
+        }
+        if (!mime.startsWith('image/')) continue
+        pictures.push({
+          index: pictures.length,
+          anchor: { section: sec, para },
+          titleAbove: textAbove(doc, sec, para, textAt),
+        })
+      }
+    }
+  }
+  if (pictures.length >= MAX_PROFILE_PICTURES) truncated = true
+
+  const profile = {
+    charShapes: [...shapes.values()],
+    paragraphs,
+    tables,
+    pictures,
+  }
+  if (truncated) profile.truncated = true
+  return profile
 }
 
 /**
@@ -2877,6 +3478,8 @@ function shiftMarks(marks, before, after, at) {
 
 /** Takes the plugin's double-click listener off the page again. */
 let stopListening = null
+/** A drag begun with a double click, kept on whole words (wordDrag); null when there is none. */
+let wordDragState = null
 /** Takes the marks off the page again, with what keeps them in place. */
 let stopMarking = null
 /** Takes the memo anchors off the page again, with what keeps them in place. */
@@ -2948,6 +3551,8 @@ export const agentPlugin = {
     let own = false
     // the text is read for every request; it only changes when the document does
     let text = null
+    // the pictures of the document, in reading order, as the last listPictures read them
+    let pictures = null
     // the places this plugin changed since the panel last cleared them, as they are now
     let marks = []
     // the memo panel: the memos as last read, whether its anchors are shown, which one is
@@ -3351,6 +3956,7 @@ export const agentPlugin = {
 
     host.events.on('document-changed', () => {
       text = null
+      pictures = null
       if (!own) {
         foreign += 1
         // an edit of the user's own moves text under the marks: they would point astray
@@ -3568,20 +4174,55 @@ export const agentPlugin = {
       // as above
     }
 
+    /** The text of a body or cell paragraph the caret is in, as the word commands read it. */
+    const readParagraph = (at) =>
+      host.read((doc) => {
+        const box = containerOf(doc, { sec: at.sec, para: at.para, cellPath: at.path })
+        return box.text(at.k, box.length(at.k))
+      })
+
     try {
       host.automation.registerCommand({
         id: WORD_COMMAND,
         label: 'Select the word',
         execute: (services) => {
           try {
-            selectWord(services, (at) =>
-              host.read((doc) => {
-                const box = containerOf(doc, { sec: at.sec, para: at.para, cellPath: at.path })
-                return box.text(at.k, box.length(at.k))
-              }),
-            )
+            selectWord(services, readParagraph)
           } catch {
             // a place the caret cannot be read at: nothing is selected, as before
+          }
+        },
+      })
+    } catch {
+      // as above
+    }
+
+    try {
+      host.automation.registerCommand({
+        id: PARAGRAPH_COMMAND,
+        label: 'Select the paragraph',
+        execute: (services) => {
+          try {
+            selectParagraph(services, readParagraph)
+          } catch {
+            // as for the word
+          }
+        },
+      })
+    } catch {
+      // as above
+    }
+
+    try {
+      host.automation.registerCommand({
+        id: WORD_DRAG_COMMAND,
+        label: 'Select by words while dragging',
+        execute: (services, params) => {
+          try {
+            const phase = params && params.phase === 'start' ? 'start' : 'move'
+            wordDragState = wordDrag(services, readParagraph, wordDragState, phase)
+          } catch {
+            // the studio's own drag selection stays
           }
         },
       })
@@ -3653,20 +4294,69 @@ export const agentPlugin = {
 
     const page = globalThis.document
     if (page) {
+      const inPage = (event) => {
+        const target = event.target
+        return Boolean(target && target.closest && target.closest('#scroll-container'))
+      }
+      const run = (id, params) => {
+        try {
+          host.automation.execute(id, params)
+        } catch {
+          // no such command in this editor: the click stays what it was
+        }
+      }
+      let dragFrame = 0
       const onDoubleClick = (event) => {
         // the studio handled it (a header, a text box, a picture), or it was not in the page
-        if (event.defaultPrevented) return
-        const target = event.target
-        if (!target || !target.closest || !target.closest('#scroll-container')) return
-        try {
-          host.automation.execute(WORD_COMMAND)
-        } catch {
-          // no such command in this editor: the double click stays what it was
-        }
+        if (event.defaultPrevented || !inPage(event)) return
+        // a double click that dragged on has its words selected already
+        if (wordDragState && wordDragState.widened) return
+        run(WORD_COMMAND)
+      }
+      // Hangul's other clicks: a triple click selects the paragraph, and a drag begun with a
+      // double click selects whole words. Both run after the studio has put the caret down.
+      // (The studio cancels every press in the page to keep its focus, so that says nothing.)
+      const onMouseDown = (event) => {
+        wordDragState = null
+        if (event.button !== 0 || event.detail !== 2) return
+        if (!inPage(event)) return
+        run(WORD_DRAG_COMMAND, { phase: 'start' })
+      }
+      const onMouseMove = (event) => {
+        if (!wordDragState || (event.buttons & 1) === 0 || dragFrame) return
+        // after the studio's own frame, which moved the selection's end to the pointer
+        dragFrame = globalThis.requestAnimationFrame(() => {
+          dragFrame = 0
+          if (wordDragState) run(WORD_DRAG_COMMAND, { phase: 'move' })
+        })
+      }
+      const onMouseUp = () => {
+        if (!wordDragState) return
+        // the studio sets the drag's last end on release; widen it once more after that
+        setTimeout(() => {
+          if (wordDragState && wordDragState.widened) run(WORD_DRAG_COMMAND, { phase: 'move' })
+        }, 0)
+      }
+      const onClick = (event) => {
+        if (event.button !== 0 || event.detail !== 3 || event.defaultPrevented) return
+        if (!inPage(event)) return
+        run(PARAGRAPH_COMMAND)
       }
       if (stopListening) stopListening()
       page.addEventListener('dblclick', onDoubleClick)
-      stopListening = () => page.removeEventListener('dblclick', onDoubleClick)
+      page.addEventListener('mousedown', onMouseDown)
+      page.addEventListener('mousemove', onMouseMove)
+      page.addEventListener('mouseup', onMouseUp)
+      page.addEventListener('click', onClick)
+      stopListening = () => {
+        page.removeEventListener('dblclick', onDoubleClick)
+        page.removeEventListener('mousedown', onMouseDown)
+        page.removeEventListener('mousemove', onMouseMove)
+        page.removeEventListener('mouseup', onMouseUp)
+        page.removeEventListener('click', onClick)
+        if (dragFrame) globalThis.cancelAnimationFrame(dragFrame)
+        wordDragState = null
+      }
     }
 
     const guarded =
@@ -3697,6 +4387,7 @@ export const agentPlugin = {
       // not left to the editor's event alone: a stale text would send the model after
       // words that are no longer there
       text = null
+      pictures = null
       try {
         let done
         try {
@@ -3843,6 +4534,13 @@ export const agentPlugin = {
       // no document yet: the first read fills it
     }
 
+    /** The pictures of the document, read again after the document changed. */
+    const pictureList = () =>
+      host.read((doc) => {
+        pictures ??= picturesOf(doc)
+        return pictures
+      })
+
     const api = {
       foreignChanges: () => foreign,
 
@@ -3851,6 +4549,50 @@ export const agentPlugin = {
         text ??= host.read(textOf)
         return text
       }),
+
+      /** The pictures of the document, in reading order, with the words beside each one. */
+      listPictures: guarded(() => {
+        const all = pictureList()
+        return {
+          count: all.length,
+          limited: all.length >= MAX_LISTED_PICTURES,
+          pictures: all.map((picture, index) => ({
+            picture: index + 1,
+            type: picture.mime,
+            page: picture.page,
+            near: picture.near,
+            table: picture.table,
+          })),
+        }
+      }),
+
+      /** One picture (its number from listPictures) as base64, for the model to look at. */
+      readPicture: guarded((number) => {
+        if (!Number.isInteger(number) || number < 1) {
+          throw fail('BAD_ARGUMENT', 'picture must be a positive integer from listPictures')
+        }
+        const picture = pictureList()[number - 1]
+        if (!picture) return { ok: false, reason: 'no_such_picture', count: pictureList().length }
+        return host.read((doc) => {
+          const bytes = doc.getControlImageData(
+            picture.sec,
+            picture.para,
+            JSON.stringify(picture.cellPath ?? []),
+            picture.control,
+          )
+          if (bytes.length > MAX_PICTURE_BYTES) {
+            return { ok: false, reason: 'too_large', bytes: bytes.length }
+          }
+          return { ok: true, mime: picture.mime, base64: base64Of(bytes) }
+        })
+      }),
+
+      /**
+       * What the document is made of, for the format checks (`@genoffice/doc-rules`):
+       * paragraphs, tables with their cells, pictures, and every character shape in use.
+       * Reads only; no model is called.
+       */
+      documentProfile: guarded(() => host.read(profileOf)),
 
       /** Where a piece of text occurs. Exact, case-sensitive. */
       findText: guarded((find) =>
@@ -4153,6 +4895,132 @@ export const agentPlugin = {
       ),
 
       /**
+       * Change every run of text whose Hangul font is `from` to `to`, in the body and in
+       * table cells. The format check's font fix: one transaction, so one undo step, and
+       * only character shapes change. Says how many runs it changed, and whether it
+       * stopped early at the cap.
+       */
+      replaceFont: guarded((from, to) => {
+        const fromName = typeof from === 'string' ? from.trim() : ''
+        const toName = typeof to === 'string' ? to.trim() : ''
+        if (fromName === '' || toName === '') {
+          throw fail('BAD_ARGUMENT', 'both font names are needed')
+        }
+        if (fromName === toName) return { ok: true, ranges: 0, paragraphs: 0 }
+        return change('replace-font', (doc) => {
+          const chars = resolveFormat(doc, { chars: {}, font: toName }).chars
+          let ranges = 0
+          let paragraphs = 0
+          let truncated = false
+
+          /** Runs of one paragraph or cell paragraph that name the font, changed one by one. */
+          const applyRuns = (runs, read, format) => {
+            let touched = false
+            for (const run of Array.isArray(runs) ? runs : []) {
+              if (ranges >= MAX_FONT_RANGES) {
+                truncated = true
+                break
+              }
+              const start = run.startOffset ?? 0
+              const end = run.endOffset ?? 0
+              if (end <= start) continue
+              let props
+              try {
+                props = parse(read(start))
+              } catch {
+                continue
+              }
+              if (hangulFontOf(props) !== fromName) continue
+              format(start, end)
+              ranges += 1
+              touched = true
+            }
+            if (touched) paragraphs += 1
+          }
+
+          for (let sec = 0; sec < doc.getSectionCount(); sec++) {
+            const count = doc.getParagraphCount(sec)
+            for (let para = 0; para < count; para++) {
+              let length
+              try {
+                length = doc.getParagraphLength(sec, para)
+              } catch {
+                length = 0
+              }
+              if (length <= 0) continue
+              let runs
+              try {
+                runs = parse(doc.getCharShapeRuns(sec, para, 0, length))
+              } catch {
+                runs = []
+              }
+              applyRuns(
+                runs,
+                (offset) => doc.getCharPropertiesAt(sec, para, offset),
+                (start, end) =>
+                  expectOk(doc.applyCharFormat(sec, para, start, end, chars), 'change the font'),
+              )
+            }
+          }
+
+          for (const table of tablesOf(doc).tables) {
+            for (let cell = 0; cell < table.cells; cell++) {
+              let count
+              try {
+                count = doc.getCellParagraphCountByPath(
+                  table.sec,
+                  table.para,
+                  JSON.stringify(cellAt(table.path, cell, 0)),
+                )
+              } catch {
+                continue
+              }
+              for (let k = 0; k < count; k++) {
+                const path = cellAt(table.path, cell, k)
+                const json = JSON.stringify(path)
+                let length
+                try {
+                  length = doc.getCellParagraphLengthByPath(table.sec, table.para, json)
+                } catch {
+                  length = 0
+                }
+                if (length <= 0) continue
+                let runs
+                try {
+                  runs = parse(
+                    doc.getCharShapeRunsInCellByPath(table.sec, table.para, json, 0, length),
+                  )
+                } catch {
+                  runs = []
+                }
+                applyRuns(
+                  runs,
+                  (offset) =>
+                    doc.getCellCharPropertiesAtByPath(table.sec, table.para, json, offset),
+                  (start, end) =>
+                    expectOk(
+                      doc.applyCharFormatInCellByPath(
+                        table.sec,
+                        table.para,
+                        json,
+                        start,
+                        end,
+                        chars,
+                      ),
+                      'change the font',
+                    ),
+                )
+              }
+            }
+          }
+
+          const result = { ok: true, ranges, paragraphs }
+          if (truncated) result.truncated = true
+          return result
+        })
+      }),
+
+      /**
        * Change the character formatting of one occurrence of `find`, or with `all` of every
        * occurrence. Only the named properties change; the text itself is not touched.
        */
@@ -4400,17 +5268,80 @@ export const agentPlugin = {
             const pages = []
             const stop = Number.isInteger(end) ? Math.min(end, pageCount) : pageCount
             for (let page = start; page < stop; page++) {
-              const info = JSON.parse(doc.getPageInfo(page))
-              pages.push({
-                svg: doc.renderPageSvgWithProfile(page, 'print'),
-                width: info.width,
-                height: info.height,
-              })
+              pages.push(printPageOf(doc, page))
               if (Date.now() - began > PRINT_BATCH_MS) break
             }
             return { pageCount, from: start, pages }
           }),
         ),
+      ),
+
+      /**
+       * One page as the print path draws it, for the print preview. `page` is 0-based.
+       * The page count comes back with it, so the preview can show "1 / N" before any
+       * other page is drawn. Like printPages, the call lays the page out with the
+       * portable text widths and puts the screen's back before it returns.
+       */
+      previewPage: guarded((page) =>
+        host.read((doc) =>
+          withPortableWidths(doc, () => {
+            const pageCount = doc.pageCount()
+            if (!Number.isInteger(page) || page < 0 || page >= pageCount) {
+              throw fail('BAD_ARGUMENT', 'page out of range')
+            }
+            const info = JSON.parse(doc.getPageInfo(page))
+            return {
+              pageCount,
+              page,
+              svg: doc.renderPageSvgWithProfile(page, 'print'),
+              width: info.width,
+              height: info.height,
+              margins: {
+                left: info.marginLeft,
+                top: info.marginTop,
+                right: info.marginRight,
+                bottom: info.marginBottom,
+              },
+            }
+          }),
+        ),
+      ),
+
+      /**
+       * The first body paragraph that starts on `page` (0-based), as the target
+       * focusTarget takes. Ctrl+Enter in the preview closes it and puts the caret
+       * there. A page whose text is one long paragraph starting earlier has no
+       * target: the caller keeps the preview open and says so.
+       */
+      pageTarget: guarded((page) =>
+        host.read((doc) => {
+          const pageCount = doc.pageCount()
+          if (!Number.isInteger(page) || page < 0 || page >= pageCount) {
+            throw fail('BAD_ARGUMENT', 'page out of range')
+          }
+          const sections = doc.getSectionCount()
+          for (let sec = 0; sec < sections; sec++) {
+            const paragraphs = doc.getParagraphCount(sec)
+            for (let para = 0; para < paragraphs; para++) {
+              const at = parse(doc.getPageOfPosition(sec, para))
+              if (!at.ok || !Number.isInteger(at.page)) continue
+              if (at.page > page) break
+              if (at.page !== page) continue
+              return {
+                ok: true,
+                page,
+                target: {
+                  kind: 'body_paragraph',
+                  section: sec,
+                  paragraph: para,
+                  charOffset: 0,
+                  length: doc.getParagraphLength(sec, para),
+                },
+              }
+            }
+          }
+          return { ok: false, reason: 'no_paragraph' }
+        }),
       ),
 
       /**
@@ -5339,10 +6270,10 @@ export const agentPlugin = {
       }),
 
       /**
-       * Put Save, Save As, Export as PDF, PNG and JPG, and Print at the top of the editor's
+       * Put Save, Save As, Export as PDF, PNG and JPG, Print Preview and Print at the top of the editor's
        * File menu. The embedded editor leaves out its own (the app owns the file), which left
        * the menu with no way to save. Each item fires FILE_COMMAND_EVENT on the editor's window and the app
-       * does the rest. `labels` holds the six names in the app's language, by command. A
+       * does the rest. `labels` holds the seven names in the app's language, by command. A
        * second call puts the items back where they were; the names stay the first ones.
        */
       installFileMenu: guarded((labels) => {

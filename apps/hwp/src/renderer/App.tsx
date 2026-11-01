@@ -13,6 +13,7 @@ import {
   type TemplateDocument,
 } from '@genoffice/ui'
 import { HwpAiDock } from './ai/AiDock'
+import { DocCheckPanel } from './check/DocCheckPanel'
 import { createAgentBridge } from './ai/agent-bridge'
 import {
   DIRTY_EVENT,
@@ -28,6 +29,7 @@ import { openDocumentsDroppedOn } from './editor-drop'
 import { hwpPresentationKeyOf } from './presentation-keys'
 import { ExportRangeDialog } from './ExportRangeDialog'
 import { gatherPrintJob } from './print-flow'
+import { PrintPreview } from './preview/PrintPreview'
 import {
   RECOVERY_TICK_MS,
   createRecoveryCopier,
@@ -39,7 +41,15 @@ import { AUTOSAVE_IDLE_MS, startAutosave } from './autosave-flow'
 import { PASSWORD_FLAG } from '../../scripts/rhwp-patches.mjs'
 import { STUDIO_SETTINGS_KEY, seededStudioSettings, studioUrl } from './studio-settings'
 import { APP_COMMANDS, IMAGE_FORMATS, hwpFormatOfPath } from '../shared/ipc'
-import type { FileCommand, HwpFormat, SaveMode, UiTheme } from '../shared/ipc'
+import type {
+  FileCommand,
+  HwpFormat,
+  PreviewAction,
+  PrintMode,
+  PrintResult,
+  SaveMode,
+  UiTheme,
+} from '../shared/ipc'
 
 /**
  * booting: the editor itself is starting. loading: the editor is up and working
@@ -130,13 +140,28 @@ export default function App() {
   const lastInputAtRef = useRef(0)
   /** the format the document was opened in: what it is exported as when it is read */
   const formatRef = useRef<HwpFormat>('hwp')
+  /** the same format for the screen: the check panel passes it to the rules */
+  const [docFormat, setDocFormat] = useState<HwpFormat>('hwp')
   const [phase, setPhase] = useState<Phase>('booting')
   /** Ctrl+F5: the document alone in fullscreen, with the editor's own chrome hidden */
   const [presenting, setPresenting] = useState(false)
   const presentingRef = useRef(false)
+  /** the print preview covers the editor; 0-based page it opens on */
+  const [preview, setPreview] = useState<{ open: boolean; initialPage: number }>({
+    open: false,
+    initialPage: 0,
+  })
+  const previewRef = useRef(false)
+  /** bumped when Print / Ctrl+P arrives while the preview is already open */
+  const [printSignal, setPrintSignal] = useState(0)
   const prePresentChromeRef = useRef<ChromeVisibility | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [aiOpen, setAiOpen] = useState(() => aiPanelInitiallyOpen(AI_OPEN_KEY))
+  const [checkOpen, setCheckOpen] = useState(false)
+  /** a request the check panel hands to the AI input box; `nonce` says it is a new one */
+  const [aiPrefill, setAiPrefill] = useState<{ text: string; nonce: number } | null>(null)
+  /** counts changes made through the bridge, so the check panel can read the document again */
+  const [docRevision, setDocRevision] = useState(0)
   /** the memo column beside the document: out or not, independent of the AI dock */
   const [memoOpen, setMemoOpen] = useState(memoPanelInitiallyOpen)
   /** a memo editor is open here or in another tab: save, close and quit must wait */
@@ -163,7 +188,10 @@ export default function App() {
     () =>
       withChangeNotes(
         createAgentBridge(() => editorRef.current),
-        () => copierRef.current?.noteChange(),
+        () => {
+          copierRef.current?.noteChange()
+          setDocRevision((revision) => revision + 1)
+        },
       ),
     [],
   )
@@ -215,11 +243,13 @@ export default function App() {
           return
         }
         formatRef.current = hwpFormatOfPath(path) ?? 'hwp'
+        setDocFormat(formatRef.current)
         // an untitled copy (a skill template's, spec 5.7) is read from its temp file but
         // has no file of its own: the AI conversation and the first save treat it as new
         const copy = (await window.hwpApi.untitledCopy?.().catch(() => null)) ?? null
         if (copy) {
           formatRef.current = copy.format
+          setDocFormat(copy.format)
           copyNameRef.current = copy.name
           unsavedCopyRef.current = true
         } else setFilePath(path)
@@ -443,6 +473,7 @@ export default function App() {
         pdf: t('fileExportPdf'),
         png: t('fileExportPng'),
         jpg: t('fileExportJpg'),
+        preview: t('filePreview'),
         print: t('filePrint'),
       })
       .catch(() => {})
@@ -457,6 +488,7 @@ export default function App() {
         command === 'save' ||
         command === 'saveAs' ||
         command === 'pdf' ||
+        command === 'preview' ||
         command === 'print' ||
         (IMAGE_FORMATS as readonly unknown[]).includes(command)
       ) {
@@ -603,36 +635,108 @@ export default function App() {
     }
   }, [phase, save, showMemoBlocked])
 
-  // PDF, page pictures and print asked for by the menu and Ctrl+P: the pages are gathered
-  // here, and the main process makes the files or opens the print dialog
+  // PDF and page pictures asked for by the menu: the pages are gathered here, and the
+  // main process makes the files. Print goes through the preview, which calls runPrint.
   const printingRef = useRef(false)
   const [exportAsk, setExportAsk] = useState<{
     pageCount: number
     currentPage: number
     answer: (pages: number[] | undefined | null) => void
   } | null>(null)
+  const runPrint = useCallback(
+    async (
+      mode: PrintMode,
+      onProgress: (done: number, total: number) => void = () => {},
+    ): Promise<PrintResult> => {
+      if (phase !== 'ready') return { ok: false, error: 'the editor is not ready' }
+      if (printingRef.current) return { ok: false, error: 'already printing' }
+      printingRef.current = true
+      try {
+        const job = await gatherPrintJob(agentBridge, mode, onProgress)
+        return await window.hwpApi.printPages(job)
+      } catch (error) {
+        return { ok: false, error: detailOf(error) }
+      } finally {
+        printingRef.current = false
+      }
+    },
+    [phase, agentBridge],
+  )
+
+  useEffect(() => {
+    previewRef.current = preview.open
+  }, [preview.open])
+
+  const openPreview = useCallback(async (): Promise<void> => {
+    if (phase !== 'ready' || previewRef.current || printingRef.current) return
+    let page = 1
+    try {
+      const context = await editorRef.current?.getSelectionContext()
+      if (context && Number.isInteger(context.page) && context.page > 0) page = context.page
+    } catch {
+      // no caret yet: open at the first page
+    }
+    previewRef.current = true
+    setPreview({ open: true, initialPage: page - 1 })
+  }, [phase])
+
+  const closePreview = useCallback((): void => {
+    previewRef.current = false
+    setPreview({ open: false, initialPage: 0 })
+  }, [])
+
+  /** Ctrl+Enter in the preview: put the caret on the page's first paragraph and close. */
+  const editPage = useCallback(
+    async (page: number): Promise<boolean> => {
+      try {
+        const target = await agentBridge.pageTarget(page)
+        if (!target.ok) return false
+        const focused = await editorRef.current?.focusTarget(target.target)
+        if (!focused?.focused) return false
+        closePreview()
+        return true
+      } catch {
+        return false
+      }
+    },
+    [agentBridge, closePreview],
+  )
+
+  // File > Print / Preview and Ctrl+P: open the preview, or print from it if it is open.
+  useEffect(
+    () =>
+      window.hwpApi.onPreviewRequest((action: PreviewAction) => {
+        if (phase !== 'ready' || printingRef.current) return
+        if (previewRef.current) {
+          if (action === 'print') setPrintSignal((value) => value + 1)
+          return
+        }
+        void openPreview()
+      }),
+    [phase, openPreview],
+  )
+
+  // PDF and page pictures export without a preview, asking which pages first; the preview's
+  // own PDF button uses runPrint directly.
   useEffect(
     () =>
       window.hwpApi.onPrintRequest((mode) => {
-        if (phase !== 'ready' || printingRef.current) return
+        if (mode === 'print' || phase !== 'ready' || printingRef.current) return
         printingRef.current = true
         void (async () => {
-          const failed =
-            mode === 'pdf' ? 'pdfFailed' : mode === 'print' ? 'printFailed' : 'imageFailed'
+          const failed = mode === 'pdf' ? 'pdfFailed' : 'imageFailed'
           try {
-            // the system print dialog has its own choice of pages; a one-page document has none
+            // a one-page document has no pages to choose from
             let only: number[] | undefined
-            if (mode !== 'print') {
-              const status = await agentBridge.pageStatus()
-              if (status.pageCount > 1) {
-                const pages = await new Promise<number[] | undefined | null>((answer) =>
-                  setExportAsk({ ...status, answer }),
-                )
-                setExportAsk(null)
-                editorRef.current?.element.focus()
-                if (pages === null) return
-                only = pages
-              }
+            const status = await agentBridge.pageStatus()
+            if (status.pageCount > 1) {
+              const pages = await new Promise<number[] | undefined | null>((answer) =>
+                setExportAsk({ ...status, answer }),
+              )
+              setExportAsk(null)
+              editorRef.current?.element.focus()
+              if (pages === null) return
+              only = pages
             }
             const job = await gatherPrintJob(
               agentBridge,
@@ -764,6 +868,8 @@ export default function App() {
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
     }
     const onKey = (event: KeyboardEvent): void => {
+      // the preview owns the screen (and its own F5/ Esc handling)
+      if (previewRef.current) return
       const action = hwpPresentationKeyOf(event, presentingRef.current)
       if (!action) return
       event.preventDefault()
@@ -843,6 +949,14 @@ export default function App() {
     <div className={`hwp-app${presenting ? ' hwp-presenting' : ''}`} data-phase={phase}>
       {phase === 'ready' && (
         <div className="hwp-topbar">
+          <button
+            type="button"
+            className="hwp-topbar-button"
+            aria-pressed={checkOpen}
+            onClick={() => setCheckOpen((open) => !open)}
+          >
+            {t('checkTitle')}
+          </button>
           <MemoToggle open={memoOpen} onToggle={() => setMemoOpen((open) => !open)} />
           <label className={`autosave-toggle${autoSave ? ' on' : ''}`} data-tip={t('autoSaveTip')}>
             <span className="autosave-knob" />
@@ -857,14 +971,15 @@ export default function App() {
       )}
       <div className="app-main">
         {/* the AI dock, then the memo column beside the document (as the PDF editor's notes);
-            both can be out at once, and both need an open document */}
-        {phase === 'ready' && (
+            both can be out at once, and both need an open document. The preview covers both. */}
+        {phase === 'ready' && !preview.open && (
           <HwpAiDock
             open={aiOpen}
             setOpen={setAiOpen}
             bridge={agentBridge}
             filePath={filePath}
             templateDocument={templateDocument}
+            prefill={aiPrefill}
           />
         )}
         {phase === 'ready' && (
@@ -888,6 +1003,18 @@ export default function App() {
         )}
         <div className="hwp-stage">
           <div ref={hostRef} className="hwp-editor-host" />
+          {phase === 'ready' && checkOpen && (
+            <DocCheckPanel
+              bridge={agentBridge}
+              format={docFormat}
+              revision={docRevision}
+              onClose={() => setCheckOpen(false)}
+              onHandOff={(request) => {
+                setAiPrefill({ text: request, nonce: Date.now() })
+                setAiOpen(true)
+              }}
+            />
+          )}
           {phase === 'booting' && <div className="hwp-cover">{t('loading')}</div>}
           {notice && (
             <div
@@ -910,6 +1037,16 @@ export default function App() {
           )}
         </div>
       </div>
+      {preview.open && (
+        <PrintPreview
+          bridge={agentBridge}
+          initialPage={preview.initialPage}
+          printSignal={printSignal}
+          onClose={closePreview}
+          onPrint={runPrint}
+          onEditPage={editPage}
+        />
+      )}
     </div>
   )
 }

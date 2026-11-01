@@ -18,16 +18,18 @@ import {
   hancomChordStart,
   hancomCommands,
   hancomContextKey,
+  hancomRowDragUpdates,
   hancomTableObjectKey,
-  installHancomStatusBar,
   letterOf,
   MAIN_PROCESS_KEYS,
-  normalizeHancomPageLabel,
-  normalizeHancomSectionLabel,
+  quickCorrectTyped,
   resizeRowColumnBlock,
   resizeSelectedCell,
   studioCommandIds,
   withHancomLabel,
+  installHancomStatusBar,
+  normalizeHancomPageLabel,
+  normalizeHancomSectionLabel,
 } from '../studio-plugin/hancom-keys.mjs'
 
 type Key = Partial<KeyboardEvent> & { preventDefault: () => void }
@@ -962,6 +964,21 @@ describe('equal cell sizes (H/W)', () => {
         })),
       resizeTableCells: vi.fn(() => ({ ok: true })),
       resizeTableCell: vi.fn(() => ({ ok: true, moved: true })),
+      // the cells take the sizes asked, so they draw at them
+      setTableCellExtents: vi.fn(
+        (
+          _s: number,
+          _p: number,
+          _c: number,
+          vertical: boolean,
+          extents: { cellIdx: number; start: number; end: number }[],
+        ) => {
+          for (const { cellIdx, start, end } of extents) {
+            cells[cellIdx][vertical ? 'height' : 'width'] = end - start
+          }
+          return { ok: true }
+        },
+      ),
     }
     const ih = {
       cursor: {
@@ -1016,16 +1033,18 @@ describe('equal cell sizes (H/W)', () => {
       kind: 'snapshot',
       operationType: 'equalizeColumnWidths',
     })
-    // the engine moves the next boundary, so each column is one call inside the snapshot
-    expect(wasm.resizeTableCells).toHaveBeenCalledTimes(2)
-    expect(wasm.resizeTableCells.mock.calls[0][3]).toEqual([
-      { cellIdx: 0, widthDelta: 750 },
-      { cellIdx: 2, widthDelta: 750 },
+    // every cell's place in one call: the cells of each row share the row's width
+    expect(wasm.setTableCellExtents).toHaveBeenCalledTimes(1)
+    expect(wasm.setTableCellExtents.mock.calls[0].slice(3)).toEqual([
+      false,
+      [
+        { cellIdx: 0, start: 0, end: 2250 },
+        { cellIdx: 1, start: 2250, end: 4500 },
+        { cellIdx: 2, start: 0, end: 2250 },
+        { cellIdx: 3, start: 2250, end: 4500 },
+      ],
     ])
-    expect(wasm.resizeTableCells.mock.calls[1][3]).toEqual([
-      { cellIdx: 1, widthDelta: -750 },
-      { cellIdx: 3, widthDelta: -750 },
-    ])
+    expect(wasm.resizeTableCells).not.toHaveBeenCalled()
     expect(ih.updateCellSelection).toHaveBeenCalled()
   })
 
@@ -1041,13 +1060,19 @@ describe('equal cell sizes (H/W)', () => {
       ],
     )
     expect(equalizeTableCells(services, 'height')).toBe(true)
-    expect(wasm.resizeTableCells.mock.calls[0][3]).toEqual([
-      { cellIdx: 0, heightDelta: 1500 },
-      { cellIdx: 1, heightDelta: 1500 },
+    // the average of what they draw at (1500 and 3000), as Hangul does, not the tallest
+    expect(wasm.setTableCellExtents.mock.calls[0].slice(3)).toEqual([
+      true,
+      [
+        { cellIdx: 0, start: 0, end: 2250 },
+        { cellIdx: 1, start: 0, end: 2250 },
+        { cellIdx: 2, start: 2250, end: 4500 },
+        { cellIdx: 3, start: 2250, end: 4500 },
+      ],
     ])
   })
 
-  it('leaves a table with merged cells alone and says why', () => {
+  it('sizes a table with merged cells too (table-sizes.test.ts has the sums)', () => {
     const { services, wasm } = table(
       [
         [1000, 3000],
@@ -1059,11 +1084,8 @@ describe('equal cell sizes (H/W)', () => {
       ],
       { spans: true },
     )
-    const showToast = vi.fn()
-    hancomCommands('ko', { showToast })
-    expect(equalizeTableCells(services, 'width')).toBe(false)
-    expect(wasm.resizeTableCells).not.toHaveBeenCalled()
-    expect(showToast).toHaveBeenCalled()
+    expect(equalizeTableCells(services, 'width')).toBe(true)
+    expect(wasm.setTableCellExtents).toHaveBeenCalledTimes(1)
   })
 
   it('leaves a partial row block alone and says why', () => {
@@ -1081,14 +1103,14 @@ describe('equal cell sizes (H/W)', () => {
     const showToast = vi.fn()
     hancomCommands('ko', { showToast })
     expect(equalizeTableCells(services, 'height')).toBe(false)
-    expect(wasm.resizeTableCells).not.toHaveBeenCalled()
+    expect(wasm.setTableCellExtents).not.toHaveBeenCalled()
     expect(showToast).toHaveBeenCalled()
   })
 
   it('leaves a table inside a cell to Phase 2', () => {
     const { services, wasm } = table([[1000, 3000]], [[1000, 1000]], { nested: true })
     expect(equalizeTableCells(services, 'width')).toBe(false)
-    expect(wasm.resizeTableCells).not.toHaveBeenCalled()
+    expect(wasm.setTableCellExtents).not.toHaveBeenCalled()
   })
 
   it('writes nothing when the sizes are already equal', () => {
@@ -1175,7 +1197,7 @@ describe('equal cell sizes (H/W)', () => {
     ])
   })
 
-  it('leaves merged cells and tables inside a cell alone', () => {
+  it('resizes a table with merged cells, and leaves tables inside a cell alone', () => {
     const merged = table(
       [
         [1500, 1500],
@@ -1187,11 +1209,8 @@ describe('equal cell sizes (H/W)', () => {
       ],
       { spans: true },
     )
-    const showToast = vi.fn()
-    hancomCommands('ko', { showToast })
-    expect(resizeRowColumnBlock(merged.services, 'right')).toBe(false)
-    expect(merged.wasm.resizeTableCells).not.toHaveBeenCalled()
-    expect(showToast).toHaveBeenCalled()
+    expect(resizeRowColumnBlock(merged.services, 'right')).toBe(true)
+    expect(merged.wasm.resizeTableCells).toHaveBeenCalledTimes(1)
 
     const nested = table(
       [
@@ -1229,8 +1248,8 @@ describe('equal cell sizes (H/W)', () => {
     expect(ih.updateCellSelection).toHaveBeenCalled()
   })
 
-  it('Shift+Down moves the current cell height and the next cell height back', () => {
-    const { services, wasm } = table(
+  it('Shift+Down moves the current cell bottom and the top of the cell below, from the drawn heights', () => {
+    const { services, wasm, ih } = table(
       [
         [1500, 1500],
         [1500, 1500],
@@ -1241,7 +1260,48 @@ describe('equal cell sizes (H/W)', () => {
       ],
     )
     expect(resizeSelectedCell(services, 'down')).toBe(true)
-    expect(wasm.resizeTableCell).toHaveBeenCalledWith(0, 1, 0, 0, 0, true, true)
+    expect(ih.executeOperation.mock.calls[0][0]).toMatchObject({
+      kind: 'snapshot',
+      operationType: 'resizeTableCell',
+    })
+    // the cell beside it stays, so the rows split as in Hangul
+    expect(wasm.setTableCellExtents.mock.calls[0].slice(3)).toEqual([
+      true,
+      [
+        { cellIdx: 0, start: 0, end: 1783 },
+        { cellIdx: 1, start: 0, end: 1500 },
+        { cellIdx: 2, start: 1783, end: 3000 },
+        { cellIdx: 3, start: 1500, end: 3000 },
+      ],
+    ])
+    expect(wasm.resizeTableCell).not.toHaveBeenCalled()
+    expect(ih.updateCellSelection).toHaveBeenCalled()
+  })
+
+  it('puts Shift+Up/Down back where the text no longer fits, as Hangul refuses it', () => {
+    const { services, wasm, ih } = table(
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+    )
+    // the engine takes the sizes, but every cell's text needs 1500, so the cell below draws
+    // taller than it now stores
+    const sized = wasm.getTableCellBboxes
+    wasm.getTableCellBboxes = () => sized().map((box) => ({ ...box, h: Math.max(box.h, 20) }))
+    expect(resizeSelectedCell(services, 'down')).toBe(false)
+    expect(wasm.setTableCellExtents).toHaveBeenCalledTimes(1)
+    expect(ih.updateCellSelection).not.toHaveBeenCalled()
+    // and the last row has nothing below to give way
+    const last = table([[1500], [1500]], [[1500], [1500]], {
+      range: { startRow: 1, startCol: 0, endRow: 1, endCol: 0 },
+    })
+    expect(resizeSelectedCell(last.services, 'down')).toBe(false)
+    expect(last.wasm.setTableCellExtents).not.toHaveBeenCalled()
   })
 
   it('keeps a Shift+arrow at the last cell as no change', () => {
@@ -1276,7 +1336,106 @@ describe('equal cell sizes (H/W)', () => {
     expect(wasm.resizeTableCell).not.toHaveBeenCalled()
   })
 
-  it('leaves a table with actual merged cells alone for Shift+arrow', () => {
+  it('a plain drag on a horizontal border grows the row above from its drawn height, in one snapshot', () => {
+    const { wasm, ih } = table(
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+    )
+    const cells = [0, 1, 2, 3].map((i) => wasm.getCellInfo(0, 1, 0, i))
+    // the engine takes heights as asked
+    wasm.resizeTableCells = vi.fn(
+      (_s: number, _p: number, _c: number, updates: { cellIdx: number; heightDelta: number }[]) => {
+        for (const u of updates) cells[u.cellIdx].height += u.heightDelta
+        return { ok: true }
+      },
+    )
+    const state = {
+      edge: { type: 'row' },
+      tableRef: { sec: 0, ppi: 1, ci: 0 },
+      affectedCellIndices: [0, 1],
+    }
+    // the studio's input handler holds the bridge as `wasm`
+    Object.assign(ih, { wasm })
+    expect(hancomRowDragUpdates(ih, state, 750, false)).toEqual([])
+    expect(ih.executeOperation).toHaveBeenCalledTimes(1)
+    expect(ih.executeOperation.mock.calls[0][0]).toMatchObject({
+      operationType: 'resizeTableCells',
+    })
+    expect(wasm.resizeTableCells.mock.calls[0][3]).toEqual([
+      { cellIdx: 0, heightDelta: 750 },
+      { cellIdx: 1, heightDelta: 750 },
+    ])
+    // drawn as asked: nothing more to put right
+    expect(wasm.resizeTableCells).toHaveBeenCalledTimes(1)
+    expect(wasm.setTableCellExtents).not.toHaveBeenCalled()
+    // Alt+drag: the row below gives way, as Alt+arrow moves a boundary (row 0 drew 2250 now)
+    expect(hancomRowDragUpdates(ih, state, 750, true)).toEqual([])
+    expect(wasm.resizeTableCells.mock.calls[1][3]).toEqual([
+      { cellIdx: 0, heightDelta: 750 },
+      { cellIdx: 1, heightDelta: 750 },
+      { cellIdx: 2, heightDelta: -750 },
+      { cellIdx: 3, heightDelta: -750 },
+    ])
+    // at the bottom edge there is no row below: the table grows
+    const bottom = { ...state, affectedCellIndices: [2, 3] }
+    expect(hancomRowDragUpdates(ih, bottom, 300, true)).toEqual([])
+    expect(wasm.resizeTableCells.mock.calls[2][3]).toEqual([
+      { cellIdx: 2, heightDelta: 300 },
+      { cellIdx: 3, heightDelta: 300 },
+    ])
+    // column borders and tables inside a cell stay the studio's
+    expect(hancomRowDragUpdates(ih, { ...state, edge: { type: 'col' } }, 750, false)).toBeNull()
+    const nested = { ...state, tableRef: { ...state.tableRef, path: [{}, {}] } }
+    expect(hancomRowDragUpdates(ih, nested, 750, false)).toBeNull()
+  })
+
+  it('puts the rows right when the engine draws a growing row short, inside the same snapshot', () => {
+    const { wasm, ih } = table(
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+      [
+        [1500, 1500],
+        [1500, 1500],
+      ],
+      { range: { startRow: 1, startCol: 0, endRow: 1, endCol: 1 } },
+    )
+    const cells = [0, 1, 2, 3].map((i) => wasm.getCellInfo(0, 1, 0, i))
+    // the engine draws only half of the change, as a merged cell's text can leave a row, and
+    // spreads the rest over the other rows
+    wasm.resizeTableCells = vi.fn(
+      (_s: number, _p: number, _c: number, updates: { cellIdx: number; heightDelta: number }[]) => {
+        for (const u of updates) cells[u.cellIdx].height += Math.round(u.heightDelta / 2)
+        cells[0].height += 75
+        cells[1].height += 75
+        return { ok: true }
+      },
+    )
+    expect(resizeRowColumnBlock({ getInputHandler: () => ih, wasm }, 'down')).toBe(true)
+    expect(ih.executeOperation).toHaveBeenCalledTimes(1)
+    expect(wasm.resizeTableCells).toHaveBeenCalledTimes(1)
+    // every cell placed from the rows' heights: row 0 as it drew before, row 1 at its target
+    expect(wasm.setTableCellExtents.mock.calls[0].slice(3)).toEqual([
+      true,
+      [
+        { cellIdx: 0, start: 0, end: 1500 },
+        { cellIdx: 1, start: 0, end: 1500 },
+        { cellIdx: 2, start: 1500, end: 3300 },
+        { cellIdx: 3, start: 1500, end: 3300 },
+      ],
+    ])
+    expect(cells[2].height).toBe(1800)
+    expect(cells[0].height).toBe(1500)
+  })
+
+  it('gives Shift+Left/Right to the engine where cells are merged across rows (patch 0027)', () => {
     const { services, wasm } = table(
       [
         [1500, 1500],
@@ -1288,14 +1447,11 @@ describe('equal cell sizes (H/W)', () => {
       ],
       { spans: true },
     )
-    const showToast = vi.fn()
-    hancomCommands('ko', { showToast })
-    expect(resizeSelectedCell(services, 'right')).toBe(false)
-    expect(wasm.resizeTableCell).not.toHaveBeenCalled()
-    expect(showToast).toHaveBeenCalled()
+    expect(resizeSelectedCell(services, 'right')).toBe(true)
+    expect(wasm.resizeTableCell).toHaveBeenCalledWith(0, 1, 0, 0, 0, false, true)
   })
 
-  it('continues a grid this editor made with Shift+arrow', () => {
+  it('moves a cell under a cell merged across columns with Shift+Down, as Hangul does', () => {
     const { services, wasm } = table(
       [
         [1500, 1500],
@@ -1306,41 +1462,18 @@ describe('equal cell sizes (H/W)', () => {
         [1500, 1500],
       ],
     )
-    expect(resizeSelectedCell(services, 'right')).toBe(true)
+    // the top row is one cell over two columns
     const original = wasm.getCellInfo
     wasm.getCellInfo = vi.fn((...args: [number, number, number, number]) => {
       const info = original(...args)
       return args[3] === 0 ? { ...info, colSpan: 2 } : info
     })
+    const dims = wasm.getTableDimensions
+    wasm.getTableDimensions = () => ({ ...dims(), cellCount: 4 })
     expect(resizeSelectedCell(services, 'right')).toBe(true)
-    expect(wasm.resizeTableCell).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not trust the mark in another editor', () => {
-    const first = table(
-      [
-        [1500, 1500],
-        [1500, 1500],
-      ],
-      [
-        [1500, 1500],
-        [1500, 1500],
-      ],
-    )
-    expect(resizeSelectedCell(first.services, 'right')).toBe(true)
-    const second = table(
-      [
-        [1500, 1500],
-        [1500, 1500],
-      ],
-      [
-        [1500, 1500],
-        [1500, 1500],
-      ],
-      { spans: true },
-    )
-    expect(resizeSelectedCell(second.services, 'right')).toBe(false)
-    expect(second.wasm.resizeTableCell).not.toHaveBeenCalled()
+    expect(wasm.resizeTableCell).toHaveBeenCalledTimes(1)
+    expect(resizeSelectedCell(services, 'down')).toBe(true)
+    expect(wasm.setTableCellExtents).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -1419,6 +1552,60 @@ describe('against the studio source the build fetched', () => {
     expect(match({ key: 'M', code: 'KeyM', ctrlKey: true, shiftKey: true })).toBe(
       'format:align-justify',
     )
+  })
+})
+
+describe("빠른 교정: straight quotes become curly ones (Hangul's 입력 자동 서식)", () => {
+  /** The editor's input handler as far as the correction reads it: the caret and the text before it. */
+  const typing = (
+    before: string,
+    options: { composing?: boolean; header?: boolean; footnote?: boolean } = {},
+  ) => ({
+    isComposing: options.composing === true,
+    cursor: {
+      isInHeaderFooter: () => options.header === true,
+      isInFootnote: () => options.footnote === true,
+    },
+    getCursorPosition: () => ({ sectionIndex: 0, paragraphIndex: 0, charOffset: before.length }),
+    getTextAt: (pos: { charOffset: number }, count: number) =>
+      before.slice(pos.charOffset, pos.charOffset + count),
+  })
+
+  it('opens after a blank or at the start of a paragraph, as Hangul does', () => {
+    expect(quickCorrectTyped(typing('그는 '), '"', 'insertText')).toBe('“')
+    expect(quickCorrectTyped(typing(''), '"', 'insertText')).toBe('“')
+    expect(quickCorrectTyped(typing('	'), '"', 'insertText')).toBe('“')
+    expect(quickCorrectTyped(typing('("'), '"', 'insertText')).toBe('”')
+  })
+
+  it('closes after any other character', () => {
+    expect(quickCorrectTyped(typing('안녕'), '"', 'insertText')).toBe('”')
+    expect(quickCorrectTyped(typing('word'), "'", 'insertText')).toBe('’')
+    expect(quickCorrectTyped(typing('그는 '), "'", 'insertText')).toBe('‘')
+  })
+
+  it('leaves what is pasted or dropped, and what the IME is composing', () => {
+    expect(quickCorrectTyped(typing('그는 '), '"', 'insertFromPaste')).toBe('"')
+    expect(quickCorrectTyped(typing('그는 '), '"', 'insertFromDrop')).toBe('"')
+    expect(quickCorrectTyped(typing('그는 ', { composing: true }), '"', 'insertText')).toBe('"')
+    expect(
+      quickCorrectTyped(typing('그는 ', { composing: true }), '한', 'insertCompositionText'),
+    ).toBe('한')
+  })
+
+  it('leaves a header, a footer and a note as they are', () => {
+    expect(quickCorrectTyped(typing('머리말 ', { header: true }), '"', 'insertText')).toBe('"')
+    expect(quickCorrectTyped(typing('각주 ', { footnote: true }), '"', 'insertText')).toBe('"')
+  })
+
+  it('leaves every other character alone', () => {
+    expect(quickCorrectTyped(typing('그는 '), 'a', 'insertText')).toBe('a')
+    expect(quickCorrectTyped(typing('그는 '), '“', 'insertText')).toBe('“')
+  })
+
+  it('reads Ctrl+Q,I (and Ctrl+Q,D) for 문서 정보, as Hangul does', () => {
+    expect(CHORDS.q.i).toBe('ieum:document-info')
+    expect(CHORDS.q.d).toBe('ieum:document-info')
   })
 })
 

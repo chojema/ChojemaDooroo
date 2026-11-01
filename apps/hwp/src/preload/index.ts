@@ -20,7 +20,7 @@ import {
   installDropOpenBridge,
 } from '@genoffice/electron-utils/drop-open'
 import { AI_CHANNELS, HWP_CHANNELS } from '../shared/ipc'
-import type { HwpApi, PrintMode, SaveMode, UiTheme } from '../shared/ipc'
+import type { HwpApi, PreviewAction, PrintMode, SaveMode, UiTheme } from '../shared/ipc'
 import type { SubscriptionApi } from '../shared/subscription-api'
 import {
   SUBSCRIPTION_CONNECT_HELP_CHANNEL,
@@ -111,6 +111,11 @@ const api: HwpApi = {
     ipcRenderer.on(HWP_CHANNELS.printRequest, listener)
     return () => ipcRenderer.removeListener(HWP_CHANNELS.printRequest, listener)
   },
+  onPreviewRequest: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, action: PreviewAction) => handler(action)
+    ipcRenderer.on(HWP_CHANNELS.previewRequest, listener)
+    return () => ipcRenderer.removeListener(HWP_CHANNELS.previewRequest, listener)
+  },
   printPages: (job) => ipcRenderer.invoke(HWP_CHANNELS.printPages, job),
   onCloseSaveRequest: (handler) => {
     const listener = () => handler()
@@ -165,6 +170,7 @@ const api: HwpApi = {
   readAttachment: (path, offset, maxChars) =>
     ipcRenderer.invoke(HWP_CHANNELS.filesRead, path, offset, maxChars),
   readAttachmentImage: (path) => ipcRenderer.invoke(HWP_CHANNELS.filesReadImage, path),
+  analyzeMedia: (op) => ipcRenderer.invoke(HWP_CHANNELS.analyzeMedia, op),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   // the drop bridge's rules, for drops it cannot hear: paths come from the dropped files
   // here, so the page can only pass on files the user dropped

@@ -180,6 +180,7 @@ describe('the split pane role', () => {
         onSaveRequest: () => () => undefined,
         onCloseSaveRequest: () => () => undefined,
         onPrintRequest: () => () => undefined,
+        onPreviewRequest: () => () => undefined,
         onReadBytesRequest: () => () => undefined,
       } as unknown as HwpApi,
     })
