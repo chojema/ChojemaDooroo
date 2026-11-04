@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { copyFile, readFile, stat } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, isAbsolute } from 'node:path'
 import { BrowserWindow, WebContentsView, app, dialog, ipcMain, shell } from 'electron'
 import type { WebContents } from 'electron'
 import {
@@ -74,6 +74,7 @@ import type {
 
 interface RuntimePaths {
   preloadPath: string
+  automationMode?: boolean
   rendererUrl?: string
   rendererFile?: string
   /** open a file this editor made (an exported PDF) in the app; false when it cannot */
@@ -125,7 +126,15 @@ const saveWaiters = new Map<number, (ok: boolean) => void>()
 const readBytesWaiters = new Map<number, (result: unknown) => void>()
 const readTextInFlight = new Map<number, Promise<string>>()
 /** Target a view resolved with beginSave and has not committed yet */
-const pendingSaveByWc = new Map<number, { path: string; format: HwpFormat }>()
+interface AutomationSave {
+  path: string
+  overwrite: boolean
+  diskState: SaveDiskState | null
+  validate: () => Promise<void>
+  result?: CommitSaveResult
+}
+const automationSaves = new Map<number, AutomationSave>()
+const pendingSaveByWc = new Map<number, { path: string; format: HwpFormat; automation?: AutomationSave }>()
 /** Paths each view has already written this session; their first overwrite kept a backup */
 const writtenByWc = new Map<number, Set<string>>()
 /**
@@ -348,6 +357,23 @@ export function requestHwpSave(contents: WebContents, mode: SaveMode): Promise<b
   })
 }
 
+/** Explicit MCP destination; the ordinary export, repair, backup and atomic write still run. */
+export async function requestHwpSaveTo(
+  contents: WebContents, path: string, overwrite: boolean, validate: () => Promise<void>,
+): Promise<CommitSaveResult> {
+  if (!isAbsolute(path) || !hwpFormatOfPath(path)) throw new Error('HWP/HWPX 절대 경로가 필요합니다.')
+  await validate()
+  const diskState = await recordDiskState(path)
+  if (existsSync(path) && !overwrite) throw new Error('대상 파일이 있습니다. 덮어쓰려면 overwrite를 true로 지정하세요.')
+  if (saveWaiters.has(contents.id) || automationSaves.has(contents.id)) throw new Error('저장이 진행 중입니다.')
+  const request: AutomationSave = { path, overwrite, diskState, validate }
+  automationSaves.set(contents.id, request)
+  try {
+    await requestHwpSave(contents, 'saveAs')
+    return request.result ?? { ok: false, error: '저장이 취소되거나 거부되었습니다. 앱의 문서 상태를 확인하세요.' }
+  } finally { automationSaves.delete(contents.id) }
+}
+
 /** How long a live read may take; a large document exports in well under this. */
 const READ_TEXT_TIMEOUT_MS = 30_000
 /** How often the request is sent again while the renderer has not answered. */
@@ -509,6 +535,7 @@ function registerHwpIpc(): void {
     else memoModalByWc.delete(e.sender.id)
   })
   ipcMain.handle(HWP_CHANNELS.memoModalState, () => memoModalByWc.size > 0)
+  ipcMain.handle(HWP_CHANNELS.automationMode, () => runtime.automationMode === true)
 
   ipcMain.handle(HWP_CHANNELS.consumePending, (e) => {
     noteHwpPathConsumed(e.sender.id)
@@ -629,7 +656,12 @@ function registerHwpIpc(): void {
       const current = savePathByWc.get(wcId)
       const currentFormat = current ? hwpFormatOfPath(current) : null
       let target: string
-      if (mode !== 'saveAs' && current && currentFormat) {
+      const automation = mode === 'saveAs' ? automationSaves.get(wcId) : undefined
+      if (automation) {
+        await automation.validate()
+        if (existsSync(automation.path) && !automation.overwrite) throw new Error('대상 파일이 이미 있습니다.')
+        target = automation.path
+      } else if (mode !== 'saveAs' && current && currentFormat) {
         target = current
       } else {
         const win =
@@ -660,7 +692,7 @@ function registerHwpIpc(): void {
       }
       const format = hwpFormatOfPath(target)
       if (!format) throw new Error('hwp: no save format for this file name')
-      pendingSaveByWc.set(wcId, { path: target, format })
+      pendingSaveByWc.set(wcId, { path: target, format, ...(automation ? { automation } : {}) })
       return { ok: true, path: target, format }
     } catch (err) {
       settleSave(wcId, false)
@@ -685,10 +717,12 @@ function registerHwpIpc(): void {
       const pending = pendingSaveByWc.get(wcId)
       pendingSaveByWc.delete(wcId)
       const done = (result: CommitSaveResult): CommitSaveResult => {
+        if (pending?.automation) pending.automation.result = result
         settleSave(wcId, result.ok)
         return result
       }
       if (!pending) return done({ ok: false, error: 'hwp: no save in progress' })
+      if (runtime.automationMode && saveOptions.auto) return done({ ok: false, error: 'MCP 모드에서는 명시적으로 저장해야 합니다.' })
       if (!(data instanceof Uint8Array) || data.length === 0 || data.length > MAX_HWP_SAVE_BYTES) {
         return done({ ok: false, error: 'hwp: bad save request' })
       }
@@ -705,7 +739,14 @@ function registerHwpIpc(): void {
         const recorded = recordedDiskState(wcId, target)
         // the app's 30-second autosave sends auto: true, so a copy-pair conflict
         // stands down quietly instead of asking
-        if (saveOptions.auto) {
+        if (pending.automation) {
+          await pending.automation.validate()
+          if (existsSync(target) && !pending.automation.overwrite) return done({ ok: false, error: '대상 파일이 이미 있습니다.' })
+          // No modal overwrite prompt in an MCP request; concurrent disk changes are refused.
+          const current = await recordDiskState(target)
+          if ((current?.hash ?? null) !== (pending.automation.diskState?.hash ?? null) ||
+              (recorded && current?.hash !== recorded.hash)) return done({ ok: false, error: EXTERNAL_MODIFIED })
+        } else if (saveOptions.auto) {
           if (await shouldDeferAutoSave(target, recorded)) {
             return done({ ok: false, error: EXTERNAL_MODIFIED })
           }

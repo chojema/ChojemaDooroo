@@ -1,6 +1,6 @@
 {
   "name": "chojema-dooroo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Chojema Dooroo — HWP and HWPX desktop word processor",
   "license": "Apache-2.0",
@@ -31,7 +31,8 @@
     "dist:mac": "npm run build && npm run notices && npm run dist:mac -w @chojema/desktop -- --publish never",
     "version:set": "node tools/version.mjs",
     "check:public": "node tools/check-public.mjs",
-    "test:smoke": "node tools/smoke-hwp.mjs"
+    "test:smoke": "node tools/smoke-hwp.mjs",
+    "test:mcp": "node tools/smoke-mcp.mjs"
   },
   "overrides": {
     "nanoid@3": "^3.3.17",

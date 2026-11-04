@@ -15,6 +15,7 @@ import {
 import { HwpAiDock } from './ai/AiDock'
 import { DocCheckPanel } from './check/DocCheckPanel'
 import { createAgentBridge } from './ai/agent-bridge'
+import { AUTOMATION_METHODS } from '../shared/automation'
 import {
   DIRTY_EVENT,
   FILE_COMMAND_EVENT,
@@ -173,6 +174,7 @@ export default function App() {
   /** bumped by the editor's Insert > Memo menu: the memo panel opens its add dialog */
   const [memoInsertTick, setMemoInsertTick] = useState(0)
   const [autoSave, setAutoSave] = useAutoSavePref('hwpapp.autoSave', window.hwpApi)
+  const [automationMode, setAutomationMode] = useState(false)
   /** the file the document is in: the AI conversation is kept with it */
   const [filePath, setFilePath] = useState<string | null>(null)
   /** an untitled copy's name (a skill template's): the title it has until its first save */
@@ -196,6 +198,19 @@ export default function App() {
     [],
   )
 
+  useEffect(() => window.hwpApi.onAutomationRequest((request) => {
+    const respond = (ok: boolean, value?: unknown, error?: string) =>
+      window.hwpApi.sendAutomationReply({ id: request.id, ok, value, error })
+    if (request.method === 'ready') { respond(true, phase); return }
+    if (phase !== 'ready') { respond(false, undefined, '문서가 준비되지 않았습니다.'); return }
+    if (!(AUTOMATION_METHODS as readonly string[]).includes(request.method) || !Array.isArray(request.args)) {
+      respond(false, undefined, '허용하지 않는 문서 작업입니다.'); return
+    }
+    if (memoBlockedRef.current) { respond(false, undefined, '열린 메모 편집 창을 먼저 닫아 주세요.'); return }
+    const method = agentBridge[request.method] as (...args: unknown[]) => Promise<unknown>
+    void method(...request.args).then((value) => respond(true, value), (error) => respond(false, undefined, detailOf(error)))
+  }), [phase, agentBridge])
+
   // the shell's split panes: tell it whenever this pane gains focus
   useSplitPaneFocusPing()
 
@@ -214,11 +229,13 @@ export default function App() {
     let stopDrop: (() => void) | null = null
     void (async () => {
       try {
-        const [path, theme, lang] = await Promise.all([
+        const [path, theme, lang, automation] = await Promise.all([
           window.hwpApi.consumePending(),
           window.hwpApi.getTheme().catch((): UiTheme => 'system'),
           window.hwpApi.getLanguage(),
+          window.hwpApi.getAutomationMode?.() ?? Promise.resolve(false),
         ])
+        setAutomationMode(automation)
         // the studio reads its settings before first paint, so they are seeded before it exists
         localStorage.setItem(
           STUDIO_SETTINGS_KEY,
@@ -766,7 +783,7 @@ export default function App() {
   // autosave to the document's own file: 30 s and window blur, after the user has
   // paused (exporting a whole HWP document costs more than the other editors' saves)
   useEffect(() => {
-    if (!autoSave || phase !== 'ready' || !filePath) return
+    if (automationMode || !autoSave || phase !== 'ready' || !filePath) return
     const editor = editorRef.current
     if (!editor) return
     const handle = startAutosave({
@@ -788,7 +805,7 @@ export default function App() {
       save: () => save('save', true),
     })
     return () => handle.stop()
-  }, [autoSave, phase, filePath, save])
+  }, [automationMode, autoSave, phase, filePath, save])
 
   // the document as it is now, for a reader outside the editor (the MCP tool that reads
   // open documents): exported in its own format, never written anywhere
@@ -958,7 +975,7 @@ export default function App() {
             {t('checkTitle')}
           </button>
           <MemoToggle open={memoOpen} onToggle={() => setMemoOpen((open) => !open)} />
-          <label className={`autosave-toggle${autoSave ? ' on' : ''}`} data-tip={t('autoSaveTip')}>
+          {!automationMode && <label className={`autosave-toggle${autoSave ? ' on' : ''}`} data-tip={t('autoSaveTip')}>
             <span className="autosave-knob" />
             <span className="autosave-text">{t('autoSave')}</span>
             <input
@@ -966,7 +983,7 @@ export default function App() {
               checked={autoSave}
               onChange={(e) => setAutoSave(e.target.checked)}
             />
-          </label>
+          </label>}
         </div>
       )}
       <div className="app-main">

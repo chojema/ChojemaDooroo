@@ -63,6 +63,8 @@ function fakeSplit(initial: SplitPaneRole | null): FakeSplit {
  */
 function hwpApiStub(): HwpApi {
   return {
+    onAutomationRequest: () => () => undefined,
+    sendAutomationReply: () => undefined,
     onLanguageChanged: () => () => undefined,
     getTerminology: async () => 'word' as const,
     onTerminologyChanged: () => () => undefined,
@@ -169,6 +171,8 @@ describe('the split pane role', () => {
     // about the screen root alone, before the dock can even appear
     Object.assign(window, {
       hwpApi: {
+        onAutomationRequest: () => () => undefined,
+        sendAutomationReply: () => undefined,
         consumePending: () => new Promise<null>(() => {}),
         getTheme: async () => 'system',
         getLanguage: async () => 'en',

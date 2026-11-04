@@ -23,10 +23,21 @@ import { OUTBOUND_CHANNELS, confirmRequestOf } from '@genoffice/electron-utils/o
 import { autoUpdater } from 'electron-updater'
 import { CHANNEL, STATE_CHANNEL, RELEASES, editorForPath, isOpenablePath, isPdfPath, paneBounds } from '../shared/contracts'
 import type { AppState, EditorKind } from '../shared/contracts'
+import { format } from 'node:util'
+import { serveStdio, StdioServerTransport, type StdioServerHandle } from '@modelcontextprotocol/server/stdio'
+import { createConnection } from 'node:net'
+import { createDoorooMcpServer, parseMcpOptions, type McpDocuments } from './mcp'
+import { invokeHwpAutomation, waitHwpReady } from '../../../hwp/src/main/automation'
+import { requestHwpSaveTo } from '../../../hwp/src/main/hwp-main'
+
+const mcpMode = process.argv.includes('--mcp')
+// stdout belongs exclusively to JSON-RPC in this explicitly enabled mode.
+if (mcpMode) for (const method of ['log', 'info', 'debug'] as const) console[method] = (...args) => { process.stderr.write(format(...args) + '\n') }
+let mcpHandle: StdioServerHandle | undefined
 
 // Chojema Dooroo host. Editor engines and their save protections stay upstream-owned.
 app.setName('Chojema Dooroo')
-app.setPath('userData', process.env.CHOJEMA_DOOROO_USER_DATA ?? join(app.getPath('appData'), app.isPackaged ? 'ChojemaDocs' : 'ChojemaDocs-Dev'))
+app.setPath('userData', process.env.CHOJEMA_DOOROO_USER_DATA ?? join(app.getPath('appData'), (app.isPackaged ? 'ChojemaDocs' : 'ChojemaDocs-Dev') + (mcpMode ? '-MCP' : '')))
 if (process.platform === 'win32') app.setAppUserModelId('io.github.chojema.docs')
 registerRendererScheme()
 installNavigationGuard(app)
@@ -68,6 +79,7 @@ const pendingPaths: string[] = []
 const moduleRoot = app.isPackaged ? join(process.resourcesPath, 'modules') : resolve(__dirname, '../../..')
 const outFor = (kind: string) => app.isPackaged ? join(moduleRoot, kind) : join(moduleRoot, kind, 'out')
 configureHwpRuntime({
+  automationMode: mcpMode,
   preloadPath: join(outFor('hwp'), 'preload/index.js'),
   rendererFile: join(outFor('hwp'), 'renderer/index.html'),
   openGeneratedPath: () => false,
@@ -438,8 +450,51 @@ function installMenu() {
 configureAssistant((wc) => ownerFor(wc.id)?.win, (wcId) => allTabs().find((t) => t.view.webContents.id === wcId)?.path ?? null)
 setHwpFileSavedHook((wc, path) => saved(wc.id, path))
 
+async function startMcp() {
+  const owned = new Map<string, Tab>()
+  const get = (id: string) => {
+    const tab = owned.get(id)
+    if (!tab || !allTabs().includes(tab) || tab.view.webContents.isDestroyed()) throw new Error('이 MCP 세션에 열린 문서 ID가 아닙니다.')
+    return tab
+  }
+  const describe = (tab: Tab) => ({ id: tab.id, title: tab.title, ...(tab.path ? { path: tab.path } : {}) })
+  const opened = async (tab: Tab) => {
+    owned.set(tab.id, tab)
+    await waitHwpReady(tab.view.webContents)
+    return describe(tab)
+  }
+  const documents: McpDocuments = {
+    list: () => [...owned.values()].filter((tab) => allTabs().includes(tab)).map(describe),
+    create: () => opened(openTab(focusedHost(), 'hwp')),
+    open: (path) => opened(openTab(focusedHost(), 'hwp', path)),
+    invoke: (id, method, args) => invokeHwpAutomation(get(id).view.webContents, method, args),
+    save: async (id, path, overwrite, validate) => {
+      const tab = get(id)
+      await waitHwpReady(tab.view.webContents)
+      return requestHwpSaveTo(tab.view.webContents, path, overwrite, validate)
+    },
+  }
+  const options = parseMcpOptions(process.argv)
+  // The factory serves both modern and legacy MCP clients using the official SDK.
+  const initial = createDoorooMcpServer(documents, options, app.getVersion())
+  await initial.ready
+  const endpoint = process.env.CHOJEMA_DOOROO_MCP_PIPE
+  if (!endpoint) throw new Error('MCP는 Node.js로 tools/mcp.mjs를 실행하여 연결하세요.')
+  const socket = createConnection(endpoint)
+  await new Promise<void>((resolve, reject) => { socket.once('connect', resolve); socket.once('error', reject) })
+  socket.on('error', (error) => console.error('[mcp]', error.message))
+  const transport = new StdioServerTransport(socket, socket)
+  let first = true
+  mcpHandle = serveStdio(() => {
+    if (first) { first = false; return initial.server }
+    return createDoorooMcpServer(documents, options, app.getVersion()).server
+  }, { transport, onerror: (error) => console.error('[mcp]', error.message) })
+  // A disconnect asks the normal close flow to preserve unsaved work.
+  socket.once('end', () => app.quit())
+}
+
 const locked = app.requestSingleInstanceLock()
-if (!locked) app.quit()
+if (!locked) { if (mcpMode) { console.error('MCP 모드가 이미 실행 중입니다. 기존 연결을 종료한 뒤 다시 연결하세요.'); app.exit(1) } else app.quit() }
 else {
   app.on('open-file', (event, path) => { event.preventDefault(); if (!app.isReady()) pendingPaths.push(path); else void openPath(focusedHost(), path).catch(() => {}) })
   app.on('second-instance', (_event, argv) => { const host = focusedHost(); host.win.show(); host.win.focus(); for (const path of argv.filter((p) => isOpenablePath(p))) void openPath(host, path).catch(() => {}) })
@@ -453,7 +508,7 @@ else {
     installMenu()
     const host = createHost()
     for (const path of [...pendingPaths, ...process.argv.filter((p) => isOpenablePath(p) && isAbsolute(p))]) await openPath(host, path).catch(() => {})
-    if (!host.tabs.length) {
+    if (!host.tabs.length && !mcpMode) {
       if (host.win.webContents.isLoading()) host.win.webContents.once('did-finish-load', () => { if (!host.tabs.length) openTab(host, 'hwp') })
       else openTab(host, 'hwp')
     }
@@ -470,13 +525,14 @@ else {
     autoUpdater.on('update-not-available', () => { updateMessage = '현재 최신 버전입니다.'; publishAll() })
     autoUpdater.on('update-downloaded', () => { updateReady = true; updateMessage = '다운로드 완료. 작업을 저장한 뒤 업데이트를 설치하세요.'; publishAll() })
     autoUpdater.on('error', () => { updateMessage = '업데이트를 확인하지 못했습니다. 배포 페이지를 이용해 주세요.'; publishAll() })
-    if (app.isPackaged && !process.env.CHOJEMA_DOOROO_SMOKE) {
+    if (mcpMode) await startMcp()
+    if (app.isPackaged && !process.env.CHOJEMA_DOOROO_SMOKE && !mcpMode) {
       setTimeout(() => { void checkUpdate() }, 20_000)
       updateTimer = setInterval(() => { void checkUpdate() }, 4 * 60 * 60 * 1000)
     }
     app.on('activate', () => { if (!hosts.size) createHost() })
-  })
+  }).catch((error) => { console.error(error); app.exit(1) })
 }
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
-app.on('will-quit', () => { if (updateTimer) clearInterval(updateTimer); shutdownSubscriptionChildren() })
+app.on('window-all-closed', () => { if (process.platform !== 'darwin' || mcpMode) app.quit() })
+app.on('will-quit', () => { void mcpHandle?.close(); if (updateTimer) clearInterval(updateTimer); shutdownSubscriptionChildren() })
 process.on('exit', () => shutdownSubscriptionChildren())

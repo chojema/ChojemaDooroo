@@ -20,6 +20,7 @@ import {
   installDropOpenBridge,
 } from '@genoffice/electron-utils/drop-open'
 import { AI_CHANNELS, HWP_CHANNELS } from '../shared/ipc'
+import { AUTOMATION_REQUEST, AUTOMATION_REPLY } from '../shared/automation'
 import type { HwpApi, PreviewAction, PrintMode, SaveMode, UiTheme } from '../shared/ipc'
 import type { SubscriptionApi } from '../shared/subscription-api'
 import {
@@ -89,6 +90,13 @@ const aiSubscription: SubscriptionApi = {
 }
 
 const api: HwpApi = {
+  getAutomationMode: () => ipcRenderer.invoke(HWP_CHANNELS.automationMode),
+  onAutomationRequest: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, request: import('../shared/automation').AutomationRequest) => handler(request)
+    ipcRenderer.on(AUTOMATION_REQUEST, listener)
+    return () => ipcRenderer.removeListener(AUTOMATION_REQUEST, listener)
+  },
+  sendAutomationReply: (reply) => ipcRenderer.send(AUTOMATION_REPLY, reply),
   consumePending: () => ipcRenderer.invoke(HWP_CHANNELS.consumePending),
   untitledCopy: () => ipcRenderer.invoke(HWP_CHANNELS.untitledCopy),
   readFile: (path) => ipcRenderer.invoke(HWP_CHANNELS.readFile, path),

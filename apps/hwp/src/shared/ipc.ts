@@ -15,6 +15,7 @@ export const HWP_CHANNELS = {
   trackingDropped: 'hwp:tracking-dropped',
   abortSave: 'hwp:abort-save',
   saveRequest: 'hwp:save-request',
+  automationMode: 'hwp:automation-mode',
   printRequest: 'hwp:print-request',
   previewRequest: 'hwp:preview-request',
   fileCommand: 'hwp:file-command',
@@ -356,6 +357,9 @@ export interface HwpApi {
   abortSave(): void
   setDirty(dirty: boolean): void
   onSaveRequest(handler: (mode: SaveMode) => void): () => void
+  getAutomationMode(): Promise<boolean>
+  onAutomationRequest(handler: (request: import('./automation').AutomationRequest) => void): () => void
+  sendAutomationReply(reply: import('./automation').AutomationReply): void
   /**
    * the editor's own File menu asks to save or print: the main process answers it the way
    * it answers Ctrl+S and Ctrl+P, with a save or print request back to this view

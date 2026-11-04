@@ -87,7 +87,7 @@ vi.mock('@genoffice/file-parse', () => ({
 }))
 
 import { setOpenPathProbe } from '@genoffice/electron-utils'
-import { createHwpView } from '../src/main/hwp-main'
+import { configureHwpRuntime, createHwpView, requestHwpSaveTo } from '../src/main/hwp-main'
 import { HWP_CHANNELS } from '../src/shared/ipc'
 import type { BeginSaveResult, CommitSaveResult } from '../src/shared/ipc'
 
@@ -133,6 +133,72 @@ async function saveThrough(
     auto: auto === true,
   })
 }
+
+describe('MCP explicit save', () => {
+  it('blocks automatic writes in MCP mode even if an old preference was enabled', async () => {
+    configureHwpRuntime({ preloadPath: '', automationMode: true })
+    try {
+      writeFileSync(docPath, 'original')
+      const contents = await openView(docPath)
+      const result = await saveThrough(contents, SAVED_BYTES, true)
+      expect(result).toMatchObject({ ok: false })
+      expect(readFileSync(docPath, 'utf8')).toBe('original')
+      expect(existsSync(`${docPath}.bak`)).toBe(false)
+    } finally { configureHwpRuntime({ preloadPath: '' }) }
+  })
+  function renderer(contents: FakeContents, beforeCommit: () => void = () => {}) {
+    contents.send = (channel) => {
+      if (channel !== HWP_CHANNELS.saveRequest) return
+      void (async () => {
+        const begin = await call<Promise<BeginSaveResult>>(HWP_CHANNELS.beginSave, contents, 'saveAs')
+        if (!begin.ok || 'canceled' in begin) { call(HWP_CHANNELS.abortSave, contents); return }
+        beforeCommit()
+        await call(HWP_CHANNELS.commitSave, contents, SAVED_BYTES, [], {})
+      })().catch(() => call(HWP_CHANNELS.abortSave, contents))
+    }
+  }
+  it('refuses implicit overwrite before exporting or asking for a path', async () => {
+    writeFileSync(docPath, 'original')
+    const contents = await openView(docPath)
+    contents.send = vi.fn()
+    await expect(requestHwpSaveTo(contents as never, docPath, false, async () => {})).rejects.toThrow(/overwrite/)
+    expect(contents.send).not.toHaveBeenCalled()
+    expect(readFileSync(docPath, 'utf8')).toBe('original')
+  })
+  it('uses the normal commit and backup without a save dialog', async () => {
+    writeFileSync(docPath, 'original')
+    const contents = await openView(docPath)
+    renderer(contents)
+    showSaveDialog.mockClear()
+    const validate = vi.fn(async () => {})
+    const result = await requestHwpSaveTo(contents as never, docPath, true, validate)
+    expect(result).toMatchObject({ ok: true, path: docPath, backupPath: `${docPath}.bak` })
+    expect(readFileSync(`${docPath}.bak`, 'utf8')).toBe('original')
+    expect(readFileSync(docPath)).toEqual(Buffer.from(SAVED_BYTES))
+    expect(showSaveDialog).not.toHaveBeenCalled()
+    expect(validate).toHaveBeenCalledTimes(3)
+  })
+  it('refuses a disk change during export with no modal prompt or write', async () => {
+    writeFileSync(docPath, 'original')
+    const contents = await openView(docPath)
+    renderer(contents, () => writeFileSync(docPath, 'changed externally'))
+    const result = await requestHwpSaveTo(contents as never, docPath, true, async () => {})
+    expect(result.ok).toBe(false)
+    expect(readFileSync(docPath, 'utf8')).toBe('changed externally')
+    expect(existsSync(`${docPath}.bak`)).toBe(false)
+    expect(showMessageBox).not.toHaveBeenCalled()
+  })
+  it('revalidates the allowed path before commit and leaves it untouched if refused', async () => {
+    const contents = createHwpView().webContents as unknown as FakeContents
+    renderer(contents)
+    let calls = 0
+    const result = await requestHwpSaveTo(contents as never, docPath, false, async () => {
+      if (++calls === 3) throw new Error('path changed')
+    })
+    expect(result).toMatchObject({ ok: false, error: 'path changed' })
+    expect(existsSync(docPath)).toBe(false)
+  })
+})
 
 describe('same-document save guard', () => {
   it('does not ask for a file open nowhere else, whatever the disk holds', async () => {

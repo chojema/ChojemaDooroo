@@ -1,7 +1,7 @@
 {
   "name": "@chojema/desktop",
   "productName": "Chojema Dooroo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "license": "Apache-2.0",
   "author": {
@@ -18,11 +18,14 @@
     "dist:mac": "electron-builder --mac"
   },
   "devDependencies": {
-    "@genoffice/hwp": "*",
-    "@genoffice/electron-utils": "*",
-    "@genoffice/i18n": "*",
     "@genoffice/ai-provider": "*",
+    "@genoffice/electron-utils": "*",
+    "@genoffice/hwp": "*",
+    "@genoffice/i18n": "*",
     "@genoffice/ui": "*",
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/server": "^2.4.0",
+    "@types/node": "^24.10.1",
     "electron": "^43.7.6",
     "electron-builder": "^26.0.12",
     "electron-updater": "^6.8.9",
@@ -30,6 +33,6 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.1.11",
-    "@types/node": "^24.10.1"
+    "zod": "^4.6.7"
   }
 }
