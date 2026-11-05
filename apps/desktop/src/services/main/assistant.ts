@@ -11,6 +11,7 @@ import { aiChatGptSignInPages, aiSubscriptionLoginWindowText } from '@genoffice/
 import { AI_MEDIA_PROVIDERS, AI_SEARCH_PROVIDERS, activeCustomEndpoint, inspectLocalModelForIpc, isAiOverloadedError, chatForProvider, listLocalModelsForIpc, localEndpointTimeoutMs, normalizeAiSettings, testLocalModelForIpc, cancelLocalTestForIpc, testMediaProvider, type AiMediaProviderConfig, type AiMediaProviderId, type AiSearchProviderId, maxOutputTokensOf, sanitizeAiSettings, sanitizeCliPath, setCodexImageGenerationAvailable, streamForProvider, type AiChatRequest, type AiSettings, type AiStreamChunk, type AiStreamRequest, type AiSubscriptionProviderId, sealAiSecrets } from '@genoffice/ai-provider'
 import { listCodexModels, shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
 import { listCustomModelsForIpc } from '@genoffice/ai-provider/custom-models'
+import { isOllamaSelected, selectOllamaModel } from './ollama'
 import { ensureSubscriptionIpc, sharedSubscriptionStatuses } from '@genoffice/ai-provider/subscription'
 import { abortMediaCalls, aiToolCapabilities, createCodexImageCliGenerator, registerCodexImageGenerator, testSearchProvider, webSearchTool, imageSearchTool, readUrlTool, withMediaCallSignal, type AiToolCallContext, type AiToolCapabilities } from '@genoffice/ai-search'
 import { aiChatFailure, aiStreamErrorChunk, resolveAiRun, subscriptionStreamCallbacks, withMeteredAccepted, type AiRunTexts } from './ai-run'
@@ -60,12 +61,22 @@ function storedAiSettings(): AiSettings {
 /** Settings-screen adapter. Stored keys never cross into the host renderer. */
 export function assistantSetup() {
   const settings = storedAiSettings()
+  if (isOllamaSelected(settings)) return { provider: 'ollama', model: settings.providers.custom?.model ?? '', baseUrl: '', hasKey: false }
   const config = settings.provider === 'auto' ? undefined : settings.providers[settings.provider]
   return { provider: settings.provider, model: config?.model ?? '', baseUrl: config?.baseUrl ?? '', hasKey: !!config?.apiKey }
 }
 
-export function saveAssistantSetup(raw: unknown) {
+export async function saveAssistantSetup(raw: unknown) {
   const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  if (input.provider === 'ollama') {
+    const model = typeof input.model === 'string' ? input.model.trim() : ''
+    if (!model) throw new Error('Ollama 모델을 선택해 주세요.')
+    const sanitized = sanitizeAiSettings(await selectOllamaModel(storedAiSettings(), model))
+    if (!sanitized) throw new Error('설정값을 확인해 주세요.')
+    writeJsonAtomic(SETTINGS_PATH(), sealAiSecrets(sanitized))
+    broadcastAiSettingsChanged()
+    return assistantSetup()
+  }
   const providers = ['auto', 'codex', 'claude-code', 'chatgpt', 'openai'] as const
   const provider = providers.find((p) => p === input.provider)
   if (!provider) throw new Error('제공업체를 선택해 주세요.')

@@ -4,6 +4,7 @@ import type { AppCommand } from '../../../hwp/src/shared/ipc'
 import { basename, dirname, join, resolve, isAbsolute } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
+import { listOllamaModels } from '../services/main/ollama'
 import { configureAssistant, registerAiIpc, registerProjectIpc, assistantSetup, saveAssistantSetup } from '../services/main/assistant'
 import {
   getExternalMcpHostStatuses,
@@ -346,7 +347,8 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
     switch (action) {
       case 'state': return publish(host)
       case 'assistant-get': return assistantSetup()
-      case 'assistant-save': return saveAssistantSetup(value)
+      case 'assistant-save': return await saveAssistantSetup(value)
+      case 'ollama-models': return await listOllamaModels()
       case 'mcp-status': return { hosts: getExternalMcpHostStatuses(), servers: await sharedMcpRegistry.getStatuses() }
       case 'mcp-host-register': return registerDoorooInExternalHosts((value && typeof value === 'object' ? value : {}) as { clients?: ExternalMcpClientId[]; roots?: string[]; readOnly?: boolean })
       case 'mcp-host-unregister': return unregisterDoorooFromExternalHosts(Array.isArray(value) ? (value as ExternalMcpClientId[]) : undefined)

@@ -808,6 +808,7 @@ describe('the studio source the build fetched', () => {
     'src/command/commands/format.ts',
     'src/command/commands/insert.ts',
     'src/command/commands/table.ts',
+    'src/command/commands/tool.ts',
     'src/command/shortcut-map.ts',
     'src/ui/table-cell-props-dialog.ts',
     'src/command/registry.ts',
