@@ -1280,6 +1280,59 @@ const PATCHES = {
   // Paste onto a cell block fills the selected cells (hancom-keys.mjs); the key handler
   // keeps the block for Ctrl+V, and the paste event asks the module before the studio
   // pastes at the caret. Menu "paste" comes through the same event.
+  /**
+   * studio-editor-options-bridge, studio-options-to-app
+   *   The app has one Preferences page (Tools > Preferences). The editor's own options
+   *   dialog is not shown: its command opens the app's page instead, and the page's
+   *   editor options (recent fonts, recovery copies, PDF guidance) reach the editor
+   *   through `window.__doorooEditorOptions`, which also opens the font-set dialog.
+   */
+  'studio-editor-options-bridge': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]main\.ts$/,
+    find:
+      "  eventBus.on('autosave-settings-changed', () => {\n" +
+      '    autosaveManager.updateSchedule(autosaveScheduleFromUserSettings());\n' +
+      '  });\n',
+    replace:
+      "  eventBus.on('autosave-settings-changed', () => {\n" +
+      '    autosaveManager.updateSchedule(autosaveScheduleFromUserSettings());\n' +
+      '  });\n' +
+      '  (window as unknown as Record<string, unknown>).__doorooEditorOptions = {\n' +
+      '    get: () => {\n' +
+      '      const font = userSettings.getFontSettings();\n' +
+      '      return {\n' +
+      '        showRecentFonts: font.showRecentFonts,\n' +
+      '        recentFontCount: font.recentFontCount,\n' +
+      '        ...userSettings.getAutosaveSettings(),\n' +
+      '        showPdfPrintGuidance: userSettings.getShowPdfPrintGuidance(),\n' +
+      '      };\n' +
+      '    },\n' +
+      '    apply: (o: { showRecentFonts: boolean; recentFontCount: number; recoveryEnabled: boolean; recoveryIntervalMinutes: number; idleSaveEnabled: boolean; idleDelaySeconds: number; showPdfPrintGuidance: boolean }) => {\n' +
+      '      userSettings.updateFontSettings({ showRecentFonts: o.showRecentFonts, recentFontCount: o.recentFontCount });\n' +
+      '      userSettings.updateAutosaveSettings({\n' +
+      '        recoveryEnabled: o.recoveryEnabled, recoveryIntervalMinutes: o.recoveryIntervalMinutes,\n' +
+      '        idleSaveEnabled: o.idleSaveEnabled, idleDelaySeconds: o.idleDelaySeconds,\n' +
+      '      });\n' +
+      '      userSettings.setShowPdfPrintGuidance(o.showPdfPrintGuidance);\n' +
+      "      eventBus.emit('autosave-settings-changed', { source: 'dooroo-preferences' });\n" +
+      '    },\n' +
+      '    openFontSets: () => {\n' +
+      "      void import('./ui/font-set-dialog').then(({ FontSetDialog }) => new FontSetDialog().show());\n" +
+      '    },\n' +
+      '  };\n',
+  },
+  'studio-options-to-app': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]command[\\/]commands[\\/]tool\.ts$/,
+    find:
+      '    execute(services) {\n' +
+      '      const dlg = new OptionsDialog(services.eventBus);\n' +
+      '      dlg.show();\n' +
+      '    },\n',
+    replace:
+      '    execute() {\n' +
+      "      globalThis.dispatchEvent?.(new CustomEvent('ieum:file-command', { detail: 'settings' }));\n" +
+      '    },\n',
+  },
   'studio-cell-block-paste': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]engine[\\/]input-handler-keyboard\.ts$/,
     edits: [
@@ -1349,6 +1402,8 @@ export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-system-font-supply',
   'studio-system-font-canvas-alias',
   'studio-pc-fonts',
+  'studio-editor-options-bridge',
+  'studio-options-to-app',
 ])
 
 /** Whether a patch is written against this file. */

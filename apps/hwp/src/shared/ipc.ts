@@ -3,6 +3,7 @@ import type { AiToolCapabilities, MediaToolErrorCode } from '@genoffice/ai-searc
 import type { Lang } from '@genoffice/i18n'
 import type { AiPanelPrefs, AutoSaveDefault } from '@genoffice/ui'
 import type { SubscriptionApi } from './subscription-api'
+import type { EditorOptions, EditorPanel } from './editor-options'
 
 export const HWP_CHANNELS = {
   consumePending: 'hwp:consume-pending',
@@ -73,6 +74,13 @@ export const HWP_CHANNELS = {
   getAutoSaveDefault: 'app:get-auto-save-default',
   autoSaveDefaultChanged: 'app:auto-save-default-changed',
   getAiPanelPrefs: 'app:get-ai-panel-prefs',
+  /** the shell's stored editor options, or null before any were chosen */
+  getEditorOptions: 'app:get-editor-options',
+  /** an editor's current options, kept by the shell when it has none yet */
+  seedEditorOptions: 'app:seed-editor-options',
+  editorOptionsChanged: 'app:editor-options-changed',
+  /** the shell asks the active editor to show one of its panels */
+  showEditorPanel: 'app:show-editor-panel',
   setAiPanelPrefs: 'app:set-ai-panel-prefs',
   aiPanelPrefsChanged: 'app:ai-panel-prefs-changed',
 } as const
@@ -498,6 +506,11 @@ export interface HwpApi {
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** AI panel side and text size (Settings › General in the shell) */
   getAiPanelPrefs(): Promise<AiPanelPrefs>
+  /** Editor options chosen in the app's Preferences; null until the first choice or seed */
+  getEditorOptions(): Promise<EditorOptions | null>
+  seedEditorOptions(options: EditorOptions): void
+  onEditorOptionsChanged(handler: (options: EditorOptions) => void): () => void
+  onShowEditorPanel(handler: (panel: EditorPanel) => void): () => void
   setAiPanelPrefs(patch: Partial<AiPanelPrefs>): Promise<AiPanelPrefs>
   onAiPanelPrefsChanged(handler: (prefs: AiPanelPrefs) => void): () => void
   getAiSettings(): Promise<AiSettings>

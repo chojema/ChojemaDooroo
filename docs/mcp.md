@@ -10,7 +10,7 @@ Chojema Dooroo를 로컬 MCP 서버로 실행하면 외부 MCP 클라이언트�
 
 - **외부 AI 앱에 Chojema Dooroo 등록**: *"초제마 두루 MCP 연결해 줘"*, *"Claude Desktop이랑 Cursor에 MCP 등록해 줘"* (`register_dooroo_mcp` 도구 호출)
   - Claude Desktop, Claude Code, Cursor, Windsurf, Antigravity의 설정 파일에 현재 앱 경로와 내장 `mcp.mjs`, 기본 `Documents`(또는 지정한 문서 폴더)를 자동 등록합니다.
-  - 앱의 **설정 > MCP 자동 등록 > 외부 AI에 자동 등록** 버튼을 눌러도 즉시 등록됩니다.
+  - 앱의 **도구 > 환경 설정 > MCP > 외부 AI에 자동 등록** 버튼을 눌러도 즉시 등록됩니다.
 - **앱 안의 AI 도우미에 외부 MCP 서버 연결**: *"memory MCP 서버 연결해 줘"*, *"filesystem MCP 추가해 줘"* (`register_mcp_server` 도구 호출)
   - 외부 MCP 서버(`npx`, `uvx`, `node`, `python`, `docker` 등)를 `mcp-servers.json`에 저장하고 즉시 연결하여, 그 서버가 제공하는 도구들을 앱 안의 AI 도우미가 바로 사용할 수 있습니다.
 

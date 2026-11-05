@@ -1201,3 +1201,35 @@ describe("Hangul's plain drag of a horizontal table border", () => {
     expect(STUDIO_PATCHES).toContain('studio-hancom-row-drag')
   })
 })
+
+describe('rhwp preferences patches', () => {
+  const tool =
+    '    execute(services) {\n' +
+    '      const dlg = new OptionsDialog(services.eventBus);\n' +
+    '      dlg.show();\n' +
+    '    },\n'
+  const main =
+    "  eventBus.on('autosave-settings-changed', () => {\n" +
+    '    autosaveManager.updateSchedule(autosaveScheduleFromUserSettings());\n' +
+    '  });\n'
+
+  it("send the editor's options command to the app's Preferences", () => {
+    const patched = applyPatch('studio-options-to-app', tool)
+    expect(patched).not.toContain('OptionsDialog(')
+    expect(patched).toContain("new CustomEvent('ieum:file-command', { detail: 'settings' })")
+    expect(patchTargets('studio-options-to-app', '/x/rhwp-studio/src/command/commands/tool.ts')).toBe(true)
+  })
+
+  it('hand the editor options to the app and keep the autosave schedule', () => {
+    const patched = applyPatch('studio-editor-options-bridge', main)
+    expect(patched).toContain('autosaveManager.updateSchedule(autosaveScheduleFromUserSettings());')
+    expect(patched).toContain('__doorooEditorOptions')
+    expect(patched).toContain('userSettings.updateAutosaveSettings(')
+    expect(patched).toContain("import('./ui/font-set-dialog')")
+  })
+
+  it('are in the studio build', () => {
+    expect(STUDIO_PATCHES).toContain('studio-options-to-app')
+    expect(STUDIO_PATCHES).toContain('studio-editor-options-bridge')
+  })
+})

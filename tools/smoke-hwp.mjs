@@ -208,7 +208,30 @@ try {
   const backXml = (await Promise.all(Object.keys(back.files).filter((p) => /section\d+\.xml$/.test(p)).map((p) => back.file(p).async('string')))).join('\n')
   assert.match(backXml, /Chojema HWP smoke test/, 'Text survives HWPX to HWP, reopen, and HWPX conversion')
   await reopened.evaluate(() => window.hwpApi.requestFileCommand('settings'))
-  await detached.getByRole('heading', { name: '설정', exact: true }).waitFor()
+  await detached.getByRole('heading', { name: '환경 설정', exact: true }).waitFor()
+  // One Preferences entry in Tools: the editor's own options item gives way to the app's.
+  {
+    const frame = reopened.frameLocator('iframe')
+    assert.equal(await frame.locator('.md-item[data-cmd="tool:options"]').count(), 0, "The editor's own options item is gone")
+    assert.equal(await frame.locator('.md-item[data-cmd="ext:ieum-app-settings"]').count(), 1, 'Tools has one Preferences item')
+  }
+  // Editor options chosen in Preferences reach every open editor and persist.
+  await detached.getByRole('tab', { name: '파일', exact: true }).click()
+  if (!(await detached.locator('#opt-recovery').isChecked())) await detached.locator('#opt-recovery').check()
+  await detached.locator('#opt-recovery-min:not([disabled])').waitFor()
+  await detached.locator('#opt-recovery-min').fill('25')
+  await detached.locator('#opt-recovery-min').dispatchEvent('change')
+  for (let i = 0; i < 40; i++) {
+    const saved = JSON.parse(readFileSync(join(env.CHOJEMA_DOOROO_USER_DATA, 'chojema-settings.json'), 'utf8'))
+    if (saved.editorOptions?.recoveryIntervalMinutes === 25) break
+    await pause(100)
+  }
+  assert.equal(JSON.parse(readFileSync(join(env.CHOJEMA_DOOROO_USER_DATA, 'chojema-settings.json'), 'utf8')).editorOptions?.recoveryIntervalMinutes, 25)
+  for (const editor of app.context().pages().filter((p) => p.url().includes('://hwp'))) {
+    const minutes = await editor.evaluate(() => document.querySelector('iframe').contentWindow.__doorooEditorOptions?.get().recoveryIntervalMinutes)
+    assert.equal(minutes, 25, 'An open editor takes the recovery interval from Preferences')
+  }
+  await detached.getByRole('tab', { name: '일반', exact: true }).click()
   await detached.getByLabel('화면 테마').selectOption('dark')
   assert.equal(await detached.locator('html').getAttribute('data-theme'), 'dark')
   assert.equal(await detached.getByLabel('인터페이스 용어').inputValue(), 'word')

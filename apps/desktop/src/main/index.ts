@@ -37,6 +37,7 @@ import { createConnection } from 'node:net'
 import { createDoorooMcpServer, parseMcpOptions, type McpDocuments } from './mcp'
 import { invokeHwpAutomation, waitHwpReady } from '../../../hwp/src/main/automation'
 import { requestHwpSaveTo } from '../../../hwp/src/main/hwp-main'
+import { DEFAULT_EDITOR_OPTIONS, normalizeEditorOptions, type EditorOptions } from '../../../hwp/src/shared/editor-options'
 
 const mcpMode = process.argv.includes('--mcp')
 // stdout belongs exclusively to JSON-RPC in this explicitly enabled mode.
@@ -56,6 +57,8 @@ interface Settings {
   theme: 'system' | 'light' | 'dark'
   recent: string[]
   aiPrefs: typeof DEFAULT_AI_PANEL_PREFS
+  /** editor options chosen in Preferences; absent until chosen or taken from an editor */
+  editorOptions?: EditorOptions
 }
 const settingsPath = join(app.getPath('userData'), 'chojema-settings.json')
 let settings: Settings = { terminology: 'word', theme: 'system', recent: [], aiPrefs: { ...DEFAULT_AI_PANEL_PREFS, openInNewDocs: false } }
@@ -66,6 +69,7 @@ try {
     theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
     recent: Array.isArray(saved.recent) ? saved.recent.filter((p: unknown) => typeof p === 'string' && editorForPath(p)).slice(0, 15) : [],
     aiPrefs: normalizeAiPanelPrefs(saved.aiPrefs ?? settings.aiPrefs),
+    ...(saved.editorOptions ? { editorOptions: normalizeEditorOptions(saved.editorOptions) } : {}),
   }
 } catch { /* first launch or unreadable settings */ }
 nativeTheme.themeSource = settings.theme
@@ -102,7 +106,7 @@ configureHwpRuntime({
     { command: 'home', label: '홈', menuId: 'view' },
     { command: 'split', label: '나란히 보기', menuId: 'view' },
     { command: 'detach', label: '창으로 분리', menuId: 'view' },
-    { command: 'settings', label: 'Chojema Dooroo 설정', menuId: 'tool' },
+    { command: 'settings', label: '환경 설정', menuId: 'tool', replaces: 'tool:options' },
     { command: 'check-update', label: '업데이트 확인', menuId: 'tool' },
     { command: 'about', label: 'Chojema Dooroo 정보', menuId: 'tool', replaces: 'file:about' },
   ],
@@ -127,6 +131,11 @@ function publish(host: Host) {
   }
   host.win.webContents.send(STATE_CHANNEL, state)
   return state
+}
+function setEditorOptions(options: EditorOptions) {
+  settings.editorOptions = options; persist()
+  for (const wc of webContents.getAllWebContents()) wc.send('app:editor-options-changed', options)
+  publishAll()
 }
 function publishAll() { for (const host of hosts) publish(host) }
 function layout(host: Host) {
@@ -350,6 +359,16 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
       case 'close': if (typeof value === 'string') await closeTab(host, value); break
       case 'home': showPage(host, 'home'); break
       case 'settings': showPage(host, 'settings'); break
+      case 'editor-options-get': return settings.editorOptions ?? { ...DEFAULT_EDITOR_OPTIONS }
+      case 'editor-options-set': setEditorOptions(normalizeEditorOptions(value, settings.editorOptions ?? DEFAULT_EDITOR_OPTIONS)); break
+      case 'editor-panel': {
+        if (value !== 'font-sets' && value !== 'font-details') throw new Error('Invalid panel')
+        const tab = activeTab(host)
+        if (!tab) throw new Error('문서를 연 상태에서 사용할 수 있습니다.')
+        activate(host, tab.id)
+        tab.view.webContents.send('app:show-editor-panel', value)
+        break
+      }
       case 'terminology':
         if (value !== 'word' && value !== 'hwp') throw new Error('Invalid terminology')
         settings.terminology = value; persist()
@@ -388,6 +407,7 @@ function registerSharedIpc() {
     'app:get-author-name': () => 'Chojema Dooroo',
     'home:get-author-name': () => ({ value: '', fallback: 'Chojema Dooroo' }),
     'app:get-ai-panel-prefs': () => settings.aiPrefs,
+    'app:get-editor-options': () => settings.editorOptions ?? null,
     'skills:list': () => [],
     'skills:take-handoff': () => null,
     'drive:ai-enabled': () => false,
@@ -404,6 +424,10 @@ function registerSharedIpc() {
   ipcMain.handle('skills:open-settings', (event) => {
     const host = ownerFor(event.sender.id)
     if (host) { host.page = 'settings'; layout(host) }
+  })
+  ipcMain.handle('app:seed-editor-options', (_event, value) => {
+    // the first editor's own values, kept so Preferences shows what the editor uses
+    if (!settings.editorOptions) setEditorOptions(normalizeEditorOptions(value))
   })
   ipcMain.handle('app:set-ai-panel-prefs', (_event, patch) => {
     settings.aiPrefs = normalizeAiPanelPrefs({ ...settings.aiPrefs, ...patch }); persist()

@@ -1,5 +1,10 @@
 # 변경 내역
 
+## 0.11.0
+
+- 도구 메뉴의 설정을 `환경 설정` 하나로 통합. 일반(용어·테마), 파일(복구용 자동 저장·쉴 때 자동 저장·PDF 저장 안내), 글꼴, AI 도우미, MCP, 업데이트 탭으로 구성하고, 홈 화면에서도 같은 창을 염. 편집기 옵션은 열려 있는 모든 편집기에 바로 적용되고 앱 설정에 저장됨.
+- 글꼴 탭은 표준 글꼴 폴더 사용 안내, 현재 문서의 대체 글꼴 보기, 최근 사용 글꼴, 대표 글꼴 등록으로 구성. 브라우저용 글꼴 감지 문구와 버튼 제거.
+
 ## 0.10.0
 
 - AI 도우미 대화로 MCP를 자동 등록·관리하는 기능 추가(`register_dooroo_mcp`, `unregister_dooroo_mcp`, `register_mcp_server`, `remove_mcp_server`, `list_mcp_status`, `call_mcp_tool`). Claude Desktop, Claude Code, Cursor, Windsurf, Antigravity 설정 파일에 기존 항목을 보존하며 자동 등록하고, 설정 화면에 원클릭 등록 버튼과 연결 상태 표시 추가. 설치본 안에 `mcp.mjs` 내장.

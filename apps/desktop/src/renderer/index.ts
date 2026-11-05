@@ -16,6 +16,7 @@ const message = document.querySelector<HTMLElement>('#message')!
 const escape = (value: string) => value.replace(/[&<>"']/g, (s) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s]!)
 let current: AppState
 let renderedPage = ''
+let settingsTab = 'general'
 
 async function command(action: string, value?: unknown) {
   try {
@@ -39,10 +40,53 @@ function render(state: AppState) {
   }
   if (state.page === 'home') {
     renderedPage = 'home'
-    content.innerHTML = `<section class="home"><div class="eyebrow">CHOJEMA DOOROO</div><h1>문서에 집중하는 작업 공간</h1><p class="lead">HWP와 HWPX 문서를 작성하고, 나란히 살펴보세요.</p><div class="cards"><button class="card" data-action="new-hwp"><span class="file-mark hwp">H</span><strong>새 문서</strong><span>빈 문서에서 새로 시작</span><small>기본 저장 형식 HWPX</small></button><button class="card" data-action="open"><span class="file-mark hwp">H</span><strong>파일 열기</strong><span>저장된 문서 불러오기</span><small>HWP, HWPX 파일 지원</small></button></div><div class="recent-heading"><h2>최근 문서</h2></div><div class="recent">${state.recent.length ? state.recent.map((path) => `<button class="recent-file" data-action="open-path" data-value="${escape(path)}"><span>${escape(path.split(/[\\/]/).pop()!)}</span><small>${escape(path)}</small></button>`).join('') : '<div class="empty">최근에 연 문서가 없습니다.<br>HWP, HWPX 파일을 이 창으로 끌어 놓아도 열 수 있습니다.</div>'}</div><footer><span>Chojema Dooroo ${escape(state.version)}</span><button data-action="settings">설정</button></footer></section>`
+    content.innerHTML = `<section class="home"><div class="eyebrow">CHOJEMA DOOROO</div><h1>문서에 집중하는 작업 공간</h1><p class="lead">HWP와 HWPX 문서를 작성하고, 나란히 살펴보세요.</p><div class="cards"><button class="card" data-action="new-hwp"><span class="file-mark hwp">H</span><strong>새 문서</strong><span>빈 문서에서 새로 시작</span><small>기본 저장 형식 HWPX</small></button><button class="card" data-action="open"><span class="file-mark hwp">H</span><strong>파일 열기</strong><span>저장된 문서 불러오기</span><small>HWP, HWPX 파일 지원</small></button></div><div class="recent-heading"><h2>최근 문서</h2></div><div class="recent">${state.recent.length ? state.recent.map((path) => `<button class="recent-file" data-action="open-path" data-value="${escape(path)}"><span>${escape(path.split(/[\\/]/).pop()!)}</span><small>${escape(path)}</small></button>`).join('') : '<div class="empty">최근에 연 문서가 없습니다.<br>HWP, HWPX 파일을 이 창으로 끌어 놓아도 열 수 있습니다.</div>'}</div><footer><span>Chojema Dooroo ${escape(state.version)}</span><button data-action="settings">환경 설정</button></footer></section>`
   } else if (renderedPage !== 'settings') {
     renderedPage = 'settings'
-    content.innerHTML = `<section class="settings"><button class="back" data-action="home">← 홈</button><div class="eyebrow">PREFERENCES</div><h1>설정</h1><div class="setting"><div><h2>인터페이스 용어</h2><p>Word: 단락·페이지·글꼴 / HWP: 문단·쪽·글자 모양<br>선택한 용어는 모든 편집기에 바로 적용됩니다. 문서 내용과 단축키는 유지됩니다.</p></div><select id="terminology" aria-label="인터페이스 용어"><option value="word">Word 스타일 (기본값)</option><option value="hwp">HWP 스타일</option></select></div><div class="setting"><div><h2>화면 테마</h2><p>문서의 인쇄 색에는 영향을 주지 않습니다.</p></div><select id="theme" aria-label="화면 테마"><option value="system">시스템 설정</option><option value="light">밝게</option><option value="dark">어둡게</option></select></div><div class="setting"><div><h2>문서 도우미</h2><p>연결된 제공업체는 문서 편집기 안에서 선택합니다.</p></div><button data-action="ai-toggle">도우미 표시 전환</button></div><form id="assistant-form"><h2>도우미 연결</h2><p class="muted">구독 연결은 편집기 도우미의 모델 선택에서 설정합니다. API 키를 쓰는 경우에만 입력하세요.</p><label>제공업체<select id="provider"><option value="auto">자동 선택</option><option value="codex">Codex</option><option value="claude-code">Claude Code</option><option value="chatgpt">ChatGPT</option><option value="openai">OpenAI API</option></select></label><label>모델<input id="model" autocomplete="off" placeholder="기본 모델 사용" /></label><label>API 키<input id="api-key" type="password" autocomplete="off" placeholder="비워 두면 저장된 키 유지" /></label><label>API 주소<input id="base-url" type="url" placeholder="기본 주소 사용" /></label><button type="submit">연결 설정 저장</button><span id="assistant-result" role="status"></span></form><div class="setting"><div><h2>MCP 자동 등록</h2><p id="mcp-summary">AI 도우미 대화창에서 "MCP 연결해 줘"라고 말해도 자동 등록할 수 있습니다.</p></div><button id="mcp-auto-register" type="button">외부 AI에 자동 등록</button></div><div class="setting"><div><h2>업데이트</h2><p id="update-status">${escape(state.update)}</p></div><button data-action="check-update">업데이트 확인</button><button data-action="install-update">다운로드한 업데이트 설치</button><button data-action="releases">배포 페이지</button></div><div class="setting"><div><h2>Chojema Dooroo ${escape(state.version)}</h2><p>버전 및 오픈소스 라이선스 정보</p></div><button data-action="about">라이선스와 출처</button></div><p class="muted">새 문서는 HWPX로 저장합니다. 기존 HWP 문서는 저장 형식을 유지합니다.</p></section>`
+    const hasDocument = state.tabs.length > 0
+    const docHint = '<p class="hint">문서를 연 상태에서 사용할 수 있습니다.</p>'
+    const panes: Array<[string, string, string]> = [
+      ['general', '일반', `<div class="setting"><div><h2>인터페이스 용어</h2><p>Word: 단락·페이지·글꼴 / HWP: 문단·쪽·글자 모양<br>선택한 용어는 모든 편집기에 바로 적용됩니다. 문서 내용과 단축키는 유지됩니다.</p></div><select id="terminology" aria-label="인터페이스 용어"><option value="word">Word 스타일 (기본값)</option><option value="hwp">HWP 스타일</option></select></div><div class="setting"><div><h2>화면 테마</h2><p>문서의 인쇄 색에는 영향을 주지 않습니다.</p></div><select id="theme" aria-label="화면 테마"><option value="system">시스템 설정</option><option value="light">밝게</option><option value="dark">어둡게</option></select></div>`],
+      ['file', '파일', `<div class="setting"><div><h2>복구용 자동 저장</h2><p>저장하지 않은 변경이 있을 때 복구 사본을 만듭니다. 대형 문서는 복구 사본을 만드는 동안 잠시 멈출 수 있으니 간격을 길게 두면 좋습니다.</p></div><label class="inline"><input type="checkbox" id="opt-recovery" /> 사용</label><label class="inline"><input type="number" id="opt-recovery-min" min="1" max="120" /> 분마다</label></div><div class="setting"><div><h2>쉴 때 자동 저장</h2><p>입력이 멈추면 복구 사본을 한 번 더 만듭니다.</p></div><label class="inline"><input type="checkbox" id="opt-idle" /> 사용</label><label class="inline"><input type="number" id="opt-idle-sec" min="5" max="600" /> 초 뒤</label></div><div class="setting"><div><h2>PDF 저장</h2><p>안내를 끄면 PDF로 저장을 선택하는 즉시 문서 준비가 시작됩니다. 진행률과 오류는 계속 표시됩니다.</p></div><label class="inline"><input type="checkbox" id="opt-pdf-guide" /> 저장 방법 안내 표시</label></div><p class="muted">새 문서는 HWPX로 저장합니다. 기존 HWP 문서는 저장 형식을 유지합니다.</p>`],
+      ['font', '글꼴', `<div class="setting"><div><h2>사용하는 글꼴</h2><p>macOS와 Windows의 표준 글꼴 폴더(시스템 공용 폴더와 사용자 글꼴 폴더)에 설치된 글꼴을 자동으로 사용합니다. 따로 감지하거나 등록할 필요가 없습니다. 별도로 설치한 글꼴은 해당 사용권을 확인해 주세요.</p></div></div><div class="setting"><div><h2>대체 글꼴 안내</h2><p>문서에 쓰인 글꼴이 PC에 없으면 비슷한 글꼴로 대신 보여 주며, 원본 글꼴 이름은 그대로 저장합니다. 현재 문서에서 대체된 글꼴 목록을 볼 수 있습니다.</p>${docHint}</div><button data-action="editor-panel" data-value="font-details" ${hasDocument ? '' : 'disabled'}>현재 문서의 대체 글꼴 보기</button></div><div class="setting"><div><h2>최근 사용 글꼴</h2><p>글꼴 목록 위쪽에 최근에 사용한 글꼴을 보여 줍니다.</p></div><label class="inline"><input type="checkbox" id="opt-recent" /> 보이기</label><label class="inline"><input type="number" id="opt-recent-count" min="1" max="5" /> 개</label></div><div class="setting"><div><h2>대표 글꼴</h2><p>한글, 영문, 한자 등 언어별 글꼴을 짝지어 한 번에 적용하는 글꼴 세트입니다.</p>${docHint}</div><button data-action="editor-panel" data-value="font-sets" ${hasDocument ? '' : 'disabled'}>대표 글꼴 등록</button></div>`],
+      ['assistant', 'AI 도우미', `<div class="setting"><div><h2>문서 도우미</h2><p>연결된 제공업체는 문서 편집기 안에서 선택합니다.</p></div><button data-action="ai-toggle">도우미 표시 전환</button></div><form id="assistant-form"><h2>도우미 연결</h2><p class="muted">구독 연결은 편집기 도우미의 모델 선택에서 설정합니다. API 키를 쓰는 경우에만 입력하세요.</p><label>제공업체<select id="provider"><option value="auto">자동 선택</option><option value="codex">Codex</option><option value="claude-code">Claude Code</option><option value="chatgpt">ChatGPT</option><option value="openai">OpenAI API</option></select></label><label>모델<input id="model" autocomplete="off" placeholder="기본 모델 사용" /></label><label>API 키<input id="api-key" type="password" autocomplete="off" placeholder="비워 두면 저장된 키 유지" /></label><label>API 주소<input id="base-url" type="url" placeholder="기본 주소 사용" /></label><button type="submit">연결 설정 저장</button><span id="assistant-result" role="status"></span></form>`],
+      ['mcp', 'MCP', `<div class="setting"><div><h2>MCP 자동 등록</h2><p id="mcp-summary">AI 도우미 대화창에서 "MCP 연결해 줘"라고 말해도 자동 등록할 수 있습니다.</p></div><button id="mcp-auto-register" type="button">외부 AI에 자동 등록</button></div>`],
+      ['update', '업데이트', `<div class="setting"><div><h2>업데이트</h2><p id="update-status">${escape(state.update)}</p></div><button data-action="check-update">업데이트 확인</button><button data-action="install-update">다운로드한 업데이트 설치</button><button data-action="releases">배포 페이지</button></div><div class="setting"><div><h2>Chojema Dooroo ${escape(state.version)}</h2><p>버전 및 오픈소스 라이선스 정보</p></div><button data-action="about">라이선스와 출처</button></div>`],
+    ]
+    if (!panes.some(([id]) => id === settingsTab)) settingsTab = 'general'
+    content.innerHTML = `<section class="settings"><button class="back" data-action="home">← 홈</button><div class="eyebrow">PREFERENCES</div><h1>환경 설정</h1><div class="pref-tabs" role="tablist">${panes.map(([id, label]) => `<button role="tab" class="pref-tab" data-pref-tab="${id}" aria-selected="${id === settingsTab}">${label}</button>`).join('')}</div>${panes.map(([id, , body]) => `<div class="pref-pane" data-pref-pane="${id}" role="tabpanel" ${id === settingsTab ? '' : 'hidden'}>${body}</div>`).join('')}</section>`
+    for (const tab of content.querySelectorAll<HTMLButtonElement>('[data-pref-tab]')) {
+      tab.onclick = () => {
+        settingsTab = tab.dataset.prefTab!
+        for (const t of content.querySelectorAll<HTMLButtonElement>('[data-pref-tab]')) t.setAttribute('aria-selected', String(t === tab))
+        for (const pane of content.querySelectorAll<HTMLElement>('[data-pref-pane]')) pane.hidden = pane.dataset.prefPane !== settingsTab
+      }
+    }
+    const optionInputs = {
+      recoveryEnabled: document.querySelector<HTMLInputElement>('#opt-recovery')!,
+      recoveryIntervalMinutes: document.querySelector<HTMLInputElement>('#opt-recovery-min')!,
+      idleSaveEnabled: document.querySelector<HTMLInputElement>('#opt-idle')!,
+      idleDelaySeconds: document.querySelector<HTMLInputElement>('#opt-idle-sec')!,
+      showPdfPrintGuidance: document.querySelector<HTMLInputElement>('#opt-pdf-guide')!,
+      showRecentFonts: document.querySelector<HTMLInputElement>('#opt-recent')!,
+      recentFontCount: document.querySelector<HTMLInputElement>('#opt-recent-count')!,
+    }
+    const showOptions = (options: Record<string, boolean | number>) => {
+      for (const [key, input] of Object.entries(optionInputs)) {
+        if (input.type === 'checkbox') input.checked = Boolean(options[key])
+        else input.value = String(options[key])
+      }
+      optionInputs.recoveryIntervalMinutes.disabled = !optionInputs.recoveryEnabled.checked
+      optionInputs.idleDelaySeconds.disabled = !optionInputs.idleSaveEnabled.checked
+      optionInputs.recentFontCount.disabled = !optionInputs.showRecentFonts.checked
+    }
+    void command('editor-options-get').then((raw) => { if (raw && content.isConnected) showOptions(raw as Record<string, boolean | number>) })
+    for (const input of Object.values(optionInputs)) {
+      input.onchange = () => {
+        const value = Object.fromEntries(Object.entries(optionInputs).map(([key, el]) => [key, el.type === 'checkbox' ? el.checked : Number(el.value)]))
+        void command('editor-options-set', value).then(() => command('editor-options-get')).then((raw) => { if (raw) showOptions(raw as Record<string, boolean | number>) })
+      }
+    }
     const terminology = document.querySelector<HTMLSelectElement>('#terminology')!
     terminology.onchange = () => void command('terminology', terminology.value)
     const theme = document.querySelector<HTMLSelectElement>('#theme')!
@@ -95,6 +139,8 @@ function render(state: AppState) {
   if (terminology) terminology.value = state.terminology
   const status = document.querySelector('#update-status')
   if (status) status.textContent = state.update
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-action="editor-panel"]')) button.disabled = state.tabs.length === 0
+  for (const hint of document.querySelectorAll<HTMLElement>('.settings .hint')) hint.hidden = state.tabs.length > 0
 }
 document.addEventListener('click', (event) => {
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-action]')

@@ -30,6 +30,7 @@ import { openDocumentsDroppedOn } from './editor-drop'
 import { installHostFonts } from './host-fonts'
 import { hostFontNames, missingFonts } from './font-notice'
 import { FontDetails } from './FontDetails'
+import { normalizeEditorOptions, type EditorOptions } from '../shared/editor-options'
 import { hwpPresentationKeyOf } from './presentation-keys'
 import { ExportRangeDialog } from './ExportRangeDialog'
 import { gatherPrintJob } from './print-flow'
@@ -868,6 +869,32 @@ export default function App() {
       if (!disposed && !changed) terminology.setStyle(style)
     }).catch(() => {})
     return () => { disposed = true; stop(); terminology.dispose() }
+  }, [phase])
+
+  // Editor options live in the app's Preferences page; the editor takes them from there.
+  // Before any are chosen there, the editor's current values become the shell's.
+  useEffect(() => {
+    if (phase !== 'ready') return
+    const bridge = (editorRef.current?.element.contentWindow as unknown as {
+      __doorooEditorOptions?: { get(): EditorOptions; apply(options: EditorOptions): void; openFontSets(): void }
+    } | null)?.__doorooEditorOptions
+    if (!bridge) return
+    let disposed = false
+    let changed = false
+    const stopOptions = window.hwpApi.onEditorOptionsChanged((options) => {
+      changed = true
+      bridge.apply(normalizeEditorOptions(options))
+    })
+    const stopPanel = window.hwpApi.onShowEditorPanel((panel) => {
+      if (panel === 'font-sets') bridge.openFontSets()
+      else if (panel === 'font-details') setFontDetailsOpen(true)
+    })
+    void window.hwpApi.getEditorOptions().then((options) => {
+      if (disposed || changed) return
+      if (options) bridge.apply(normalizeEditorOptions(options))
+      else window.hwpApi.seedEditorOptions(normalizeEditorOptions(bridge.get()))
+    }).catch(() => {})
+    return () => { disposed = true; stopOptions(); stopPanel() }
   }, [phase])
 
   // keep the editor's own chrome on the app theme

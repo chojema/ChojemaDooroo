@@ -7,6 +7,7 @@ import { docAttachBridge } from '@genoffice/electron-utils/doc-attach-bridge'
 import { DOC_ATTACH_BRIDGE_KEY } from '@genoffice/electron-utils/doc-attach-channels'
 import { SPLIT_PANE_BRIDGE_KEY, splitPaneBridge } from '@genoffice/electron-utils/split-pane-bridge'
 import type { AiStreamChunk } from '@genoffice/ai-provider'
+import type { EditorOptions, EditorPanel } from '../shared/editor-options'
 import { SUBSCRIPTION_IPC_CHANNELS } from '@genoffice/ai-provider/browser'
 import type { Lang } from '@genoffice/i18n'
 import type { ProjectApi } from '@genoffice/project-store'
@@ -205,6 +206,18 @@ const api: HwpApi = {
     const listener = (_e: Electron.IpcRendererEvent, lang: Lang) => handler(lang)
     ipcRenderer.on(HWP_CHANNELS.languageChanged, listener)
     return () => ipcRenderer.removeListener(HWP_CHANNELS.languageChanged, listener)
+  },
+  getEditorOptions: () => ipcRenderer.invoke(HWP_CHANNELS.getEditorOptions),
+  seedEditorOptions: (options) => { void ipcRenderer.invoke(HWP_CHANNELS.seedEditorOptions, options) },
+  onEditorOptionsChanged: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, options: EditorOptions) => handler(options)
+    ipcRenderer.on(HWP_CHANNELS.editorOptionsChanged, listener)
+    return () => ipcRenderer.removeListener(HWP_CHANNELS.editorOptionsChanged, listener)
+  },
+  onShowEditorPanel: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, panel: EditorPanel) => handler(panel)
+    ipcRenderer.on(HWP_CHANNELS.showEditorPanel, listener)
+    return () => ipcRenderer.removeListener(HWP_CHANNELS.showEditorPanel, listener)
   },
   getTerminology: () => ipcRenderer.invoke(HWP_CHANNELS.getTerminology),
   onTerminologyChanged: (handler) => {

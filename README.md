@@ -37,7 +37,7 @@ Windows 설치본은 실행 후 주기적으로 새 버전을 확인하며, 새 
   - *"초제마 두루 MCP 연결해 줘"*
   - *"Claude Desktop이랑 Cursor에 MCP 등록해 줘"*
   - *"D:/Work 폴더를 허용해서 읽기 전용으로 MCP 등록해 줘"*
-- **설정 화면에서 등록**: **도구 > Chojema Dooroo 설정 > MCP 자동 등록 > 외부 AI에 자동 등록** 버튼을 누릅니다.
+- **설정 화면에서 등록**: **도구 > 환경 설정 > MCP > 외부 AI에 자동 등록** 버튼을 누릅니다.
 - Claude Desktop, Claude Code, Cursor, Windsurf, Antigravity의 설정 파일에 현재 설치된 앱 경로와 앱 내부에 기본 내장된 `mcp.mjs`, 기본 `Documents` 폴더(또는 지정한 폴더)가 자동으로 기록됩니다. 등록 후 해당 외부 AI 앱을 재시작(또는 MCP 새로고침)하면 바로 HWP/HWPX 도구를 사용할 수 있습니다.
 
 ### 2. 초제마 두루 AI 도우미에 외부 MCP 서버 연결

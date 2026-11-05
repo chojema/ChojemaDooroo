@@ -20,6 +20,8 @@ export type RhwpPatchName =
   | 'studio-system-font-supply'
   | 'studio-system-font-canvas-alias'
   | 'studio-system-font-dialog'
+  | 'studio-editor-options-bridge'
+  | 'studio-options-to-app'
 
 export declare const APP_SCHEME: string
 export declare const PASSWORD_FLAG: 'passwordProtected'
