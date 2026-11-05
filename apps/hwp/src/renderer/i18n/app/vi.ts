@@ -35,6 +35,10 @@ export const vi = {
   backupKept: 'Đã lưu. Phiên bản trước được giữ lại dưới tên {name}.',
   openedTracked:
     'Tài liệu này có theo dõi thay đổi. Bạn đang thấy nội dung hiện tại đã áp dụng các thay đổi; khi lưu, nội dung này được giữ lại và bản ghi thay đổi bị bỏ đi.',
+  missingFonts: "{count} phông chữ đang được hiển thị bằng phông thay thế. Tên gốc được giữ nguyên, nhưng ngắt dòng và phân trang có thể thay đổi.",
+  fontDetails: "Phông chữ thay thế ({count})",
+  fontPolicyDetails: "Dooroo chỉ dùng phông chữ trong các thư mục phông chuẩn của hệ thống. Phông bên trong ứng dụng khác và định dạng riêng như HFT không được dùng. Các phông dưới đây được hiển thị bằng phông thay thế. Tên gốc được giữ khi lưu trừ khi bạn đổi chúng. Chính sách này cũng áp dụng cho in và xuất tệp.",
+  fontPolicyLicense: "Hãy kiểm tra giấy phép của phông chữ được cài riêng. Việc cài vào thư mục chuẩn không tự động cấp quyền sử dụng.",
   saveTracked:
     'Chưa lưu: tài liệu này có theo dõi thay đổi; lưu ở đây sẽ làm mất chúng và có thể tạo ra tệp mà Hancom Hangul không mở được.',
   savedTailsLost:

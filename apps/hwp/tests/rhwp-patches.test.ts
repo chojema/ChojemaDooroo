@@ -592,6 +592,104 @@ describe('rhwp PC fonts patch', () => {
   })
 })
 
+describe('rhwp host font synthesis patch', () => {
+  // resolveRendererLocalFont as the pinned release has it (core/local-fonts.ts)
+  const source = [
+    "export function resolveRendererLocalFont(name: string, style?: LocalFontStyleRequest): LocalFontRecord | null {",
+    "  if (!hostFontSource.active) return resolveLocalFont(name);",
+    "  const target = normalizeFontAlias(name);",
+    "  currentHostRecords();",
+    "  const candidates = hostLookup.aliases.get(target) ?? [];",
+    "  const postscript = hostLookup.postscriptNames.get(target) ?? [];",
+    "  if (postscript.length) return postscript.length === 1 ? postscript[0] : null;",
+    "  // A Regular face often has fullName === family. A shared family alias must still",
+    "  // select Bold/Italic from the run style instead of treating that name as exact.",
+    "  if (candidates.length === 1) {",
+    "    const record = candidates[0];",
+    "    if ([record.fullName, `${record.family} ${record.style}`].some(value => normalizeFontAlias(value) === target)",
+    "      && normalizeFontAlias(record.family) !== target) return record;",
+    "  }",
+    "  if (!style) return resolveLocalFontFromLookup(name, hostLookup);",
+    "  const styled = candidates.filter(record => record.hostReference?.face.weight === style.weight",
+    "    && record.hostReference?.face.slant === style.slant);",
+    "  if (styled.length) return styled.length === 1 ? styled[0] : null;",
+    "  // Document styles expose an italic flag, while host catalogs can distinguish",
+    "  // italic from oblique. Prefer the exact slant, then its inclined counterpart.",
+    "  if (style.slant === 'normal') return null;",
+    "  const alternate = candidates.filter(record => record.hostReference?.face.weight === style.weight",
+    "    && record.hostReference?.face.slant === (style.slant === 'italic' ? 'oblique' : 'italic'));",
+    "  return alternate.length === 1 ? alternate[0] : null;",
+    "}",
+    '',
+  ].join('\n')
+  const patched = applyPatch('studio-host-font-synthesis', source)
+
+  type Face = { family: string; weight: number; slant: 'normal' | 'italic' | 'oblique' }
+  /** The patched function over a host catalog of `faces`, all answering to their family name. */
+  function resolverOver(faces: Face[]): (name: string, style?: object) => Face | null {
+    const records = faces.map((face) => ({
+      family: face.family,
+      fullName: face.family,
+      style: 'Regular',
+      hostReference: { face },
+    }))
+    const norm = (value: string) => value.toLocaleLowerCase('en-US')
+    const aliases = new Map<string, typeof records>()
+    for (const record of records) {
+      aliases.set(norm(record.family), [...(aliases.get(norm(record.family)) ?? []), record])
+    }
+    const js = ts.transpileModule(patched.replace('export function', 'function'), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText
+    const resolve = new Function(
+      'hostFontSource',
+      'normalizeFontAlias',
+      'currentHostRecords',
+      'hostLookup',
+      'resolveLocalFont',
+      'resolveLocalFontFromLookup',
+      `${js}\nreturn resolveRendererLocalFont`,
+    )(
+      { active: true },
+      norm,
+      () => records,
+      { aliases, postscriptNames: new Map() },
+      () => null,
+      (name: string) => aliases.get(norm(name))?.[0] ?? null,
+    )
+    return (name, style) => resolve(name, style)?.hostReference.face ?? null
+  }
+
+  const regular: Face = { family: 'HY견고딕', weight: 400, slant: 'normal' }
+
+  it('draws a bold or italic run of a one-face font with that face', () => {
+    const resolve = resolverOver([regular])
+    expect(resolve('HY견고딕', { weight: 400, slant: 'normal' })).toBe(regular)
+    expect(resolve('HY견고딕', { weight: 700, slant: 'normal' })).toBe(regular)
+    expect(resolve('HY견고딕', { weight: 400, slant: 'italic' })).toBe(regular)
+    expect(resolve('HY견고딕', { weight: 700, slant: 'italic' })).toBe(regular)
+  })
+
+  it('still prefers the face of the asked style, and never a heavier one', () => {
+    const bold: Face = { family: 'HCR Batang', weight: 700, slant: 'normal' }
+    const light: Face = { family: 'HCR Batang', weight: 300, slant: 'normal' }
+    const book: Face = { family: 'HCR Batang', weight: 400, slant: 'normal' }
+    const resolve = resolverOver([light, book, bold])
+    expect(resolve('HCR Batang', { weight: 700, slant: 'normal' })).toBe(bold)
+    expect(resolve('HCR Batang', { weight: 400, slant: 'italic' })).toBe(book)
+    expect(resolve('HCR Batang', { weight: 600, slant: 'normal' })).toBe(book)
+    const heavyOnly = resolverOver([{ family: 'X', weight: 700, slant: 'normal' }])
+    expect(heavyOnly('X', { weight: 400, slant: 'normal' })).toBeNull()
+  })
+
+  it('fails when the text is gone, and is in the studio build', () => {
+    expect(() =>
+      applyPatch('studio-host-font-synthesis', source.replace("if (style.slant === 'normal') return null;", '')),
+    ).toThrow(/studio-host-font-synthesis/)
+    expect(STUDIO_PATCHES).toContain('studio-host-font-synthesis')
+  })
+})
+
 describe('rhwp clipboard objects patch', () => {
   // the studio's text around the patch, as the pinned release has it
   const keyboard = [
@@ -696,6 +794,11 @@ describe('the studio source the build fetched', () => {
     'src/main.ts',
     'src/embed/protocol.ts',
     'src/core/wasm-bridge.ts',
+    'src/core/local-fonts.ts',
+    'src/core/font-substitution.ts',
+    'src/core/font-loader.ts',
+    'src/core/host-canvas-fonts.ts',
+    'src/ui/char-shape-dialog.ts',
     'src/engine/input-handler.ts',
     'src/engine/input-handler-keyboard.ts',
     'src/engine/input-handler-text.ts',

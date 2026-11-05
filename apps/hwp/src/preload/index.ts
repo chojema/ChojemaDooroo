@@ -19,7 +19,7 @@ import {
   OPENABLE_DOC_RE,
   installDropOpenBridge,
 } from '@genoffice/electron-utils/drop-open'
-import { AI_CHANNELS, HWP_CHANNELS } from '../shared/ipc'
+import { AI_CHANNELS, HWP_CHANNELS, MCP_MANAGE_CHANNELS } from '../shared/ipc'
 import { AUTOMATION_REQUEST, AUTOMATION_REPLY } from '../shared/automation'
 import type { HwpApi, PreviewAction, PrintMode, SaveMode, UiTheme } from '../shared/ipc'
 import type { SubscriptionApi } from '../shared/subscription-api'
@@ -100,6 +100,8 @@ const api: HwpApi = {
   consumePending: () => ipcRenderer.invoke(HWP_CHANNELS.consumePending),
   untitledCopy: () => ipcRenderer.invoke(HWP_CHANNELS.untitledCopy),
   readFile: (path) => ipcRenderer.invoke(HWP_CHANNELS.readFile, path),
+  hostFonts: () => ipcRenderer.invoke(HWP_CHANNELS.hostFonts),
+  hostFontRead: (id, revision) => ipcRenderer.invoke(HWP_CHANNELS.hostFontRead, id, revision),
   trackingDropped: () => ipcRenderer.invoke(HWP_CHANNELS.trackingDropped),
   beginSave: (mode) => ipcRenderer.invoke(HWP_CHANNELS.beginSave, mode),
   newTabs: (bytes, format) => ipcRenderer.invoke(HWP_CHANNELS.newTabs, bytes, format),
@@ -251,6 +253,13 @@ const api: HwpApi = {
     ipcRenderer.on(AI_CHANNELS.streamChunk, listener)
     return () => ipcRenderer.removeListener(AI_CHANNELS.streamChunk, listener)
   },
+  mcpHostStatus: () => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.hostStatus),
+  mcpHostRegister: (options) => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.hostRegister, options),
+  mcpHostUnregister: (options) => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.hostUnregister, options),
+  mcpServersList: () => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.serversList),
+  mcpServerRegister: (config) => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.serverRegister, config),
+  mcpServerRemove: (name) => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.serverRemove, name),
+  mcpToolCall: (args) => ipcRenderer.invoke(MCP_MANAGE_CHANNELS.toolCall, args),
 }
 
 contextBridge.exposeInMainWorld('hwpApi', api)

@@ -36,6 +36,10 @@ export const it = {
   backupKept: 'Salvato. La versione precedente è stata conservata come {name}.',
   openedTracked:
     'Questo documento contiene revisioni. Vedi il testo attuale, con le modifiche applicate; salvando si conserva questo testo e si perde la cronologia delle revisioni.',
+  missingFonts: "{count} caratteri sono visualizzati con sostituti. I nomi originali restano invariati, ma interruzioni di riga e paginazione possono cambiare.",
+  fontDetails: "Caratteri sostituiti ({count})",
+  fontPolicyDetails: "Dooroo usa solo i caratteri nelle cartelle standard del sistema. Non usa caratteri interni ad altre app né formati proprietari come HFT. I caratteri elencati sono visualizzati con sostituti. I nomi originali vengono conservati al salvataggio, salvo modifiche esplicite. La stessa regola vale per stampa ed esportazione.",
+  fontPolicyLicense: "Verifica le licenze dei caratteri installati separatamente. La presenza in una cartella standard non concede il permesso di utilizzo.",
   saveTracked:
     'Non salvato: questo documento contiene revisioni; salvandolo qui andrebbero perse e il file potrebbe non aprirsi in Hancom Hangul.',
   savedTailsLost:

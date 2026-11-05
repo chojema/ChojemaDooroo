@@ -31,6 +31,7 @@ import {
   printJobToPrinter,
 } from './print-document'
 import { tm } from './dialog-strings'
+import { systemFontCatalog, printFontCss, readCatalogFace, snapshotOf } from './system-fonts'
 import { fieldKindsOf } from './field-kinds'
 import type { FieldKinds } from './field-kinds'
 import { lostMemoCountOf } from './memos'
@@ -525,6 +526,8 @@ function registerHwpIpc(): void {
   })
   installHwpRecovery(recoveryHost)
   registerHwpRecoveryIpc()
+  // Standard font folders only; no application or registry discovery.
+  void systemFontCatalog()
 
   // the memo editor is renderer state; main keeps only whether this view has one open, so
   // save, close and quit can wait for it even when the document itself is clean
@@ -579,6 +582,20 @@ function registerHwpIpc(): void {
 
   ipcMain.handle(HWP_CHANNELS.trackingDropped, (e) => trackingDroppedByWc.has(e.sender.id))
 
+  // Only the standard-folder catalog can supply a font face.
+  ipcMain.handle(HWP_CHANNELS.hostFonts, async (e) => {
+    if (!hwpViews.has(e.sender.id)) return { revision: 'system-none', faces: [] }
+    return snapshotOf(await systemFontCatalog())
+  })
+  ipcMain.handle(HWP_CHANNELS.hostFontRead, async (e, id: unknown, revision: unknown) => {
+    if (!hwpViews.has(e.sender.id)) return null
+    try {
+      return await readCatalogFace(await systemFontCatalog(), id, revision)
+    } catch {
+      return null
+    }
+  })
+
   /** one print or PDF at a time per view */
   const printing = new Set<number>()
   ipcMain.handle(HWP_CHANNELS.printPages, async (e, job: unknown): Promise<PrintResult> => {
@@ -589,8 +606,13 @@ function registerHwpIpc(): void {
     printing.add(wcId)
     try {
       const printJob = job as PrintJob
+      // Print and export use the same standard-folder catalog as editing.
+      const fontCss = await printFontCss(
+        await systemFontCatalog(),
+        printJob.pages.map((page) => page.svg),
+      )
       if (printJob.mode === 'print') {
-        await printJobToPrinter(printJob, printWindow)
+        await printJobToPrinter(printJob, printWindow, fontCss)
         return { ok: true }
       }
       const win =
@@ -610,8 +632,12 @@ function registerHwpIpc(): void {
         })
         if (picked.canceled || !picked.filePath) return { ok: true, canceled: true }
         const paths = pagePicturePaths(picked.filePath, format, printJob.pages.length, printJob.numbers)
-        await printJobToImages(printJob, format, imageWindow, (index, bytes) =>
-          atomicWriteFile(paths[index]!, bytes),
+        await printJobToImages(
+          printJob,
+          format,
+          imageWindow,
+          (index, bytes) => atomicWriteFile(paths[index]!, bytes),
+          fontCss,
         )
         shell.showItemInFolder(paths[0]!)
         return { ok: true, path: paths[0]!, paths }
@@ -623,7 +649,7 @@ function registerHwpIpc(): void {
       })
       if (picked.canceled || !picked.filePath) return { ok: true, canceled: true }
       const target = /.pdf$/i.test(picked.filePath) ? picked.filePath : `${picked.filePath}.pdf`
-      const pdf = await printJobToPdf(printJob, printWindow)
+      const pdf = await printJobToPdf(printJob, printWindow, fontCss)
       await atomicWriteFile(target, pdf)
       try {
         if (!runtime.openGeneratedPath?.(target)) shell.showItemInFolder(target)

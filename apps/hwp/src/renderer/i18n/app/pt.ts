@@ -36,6 +36,10 @@ export const pt = {
   backupKept: 'Salvo. A versão anterior foi mantida como {name}.',
   openedTracked:
     'Este documento tem alterações controladas. Você vê o texto atual, com as alterações aplicadas; ao salvar, este texto é mantido e o registro de alterações é descartado.',
+  missingFonts: "{count} fontes são exibidas com substitutas. Os nomes originais são mantidos, mas as quebras de linha e a paginação podem mudar.",
+  fontDetails: "Fontes substituídas ({count})",
+  fontPolicyDetails: "Dooroo usa apenas fontes nas pastas padrão do sistema. Não usa fontes internas de outros aplicativos nem formatos exclusivos como HFT. As fontes abaixo são exibidas com substitutas. Os nomes originais são mantidos ao salvar, a menos que você os altere. A mesma regra vale para impressão e exportação.",
+  fontPolicyLicense: "Verifique as licenças das fontes instaladas separadamente. A instalação em uma pasta padrão não concede permissão de uso.",
   saveTracked:
     'Não foi salvo: este documento tem alterações controladas; salvá-lo aqui faria com que se perdessem e poderia gerar um arquivo que o Hancom Hangul não consegue abrir.',
   savedTailsLost:

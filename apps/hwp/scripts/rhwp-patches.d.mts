@@ -15,6 +15,11 @@ export type RhwpPatchName =
   | 'studio-memo-command'
   | 'studio-memo-label-ko'
   | 'studio-memo-label-en'
+  | 'studio-system-font-catalog'
+  | 'studio-system-font-display'
+  | 'studio-system-font-supply'
+  | 'studio-system-font-canvas-alias'
+  | 'studio-system-font-dialog'
 
 export declare const APP_SCHEME: string
 export declare const PASSWORD_FLAG: 'passwordProtected'

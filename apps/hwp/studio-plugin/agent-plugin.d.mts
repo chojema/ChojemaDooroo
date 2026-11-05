@@ -935,6 +935,8 @@ export interface AgentPluginSurface {
   ): AgentStyleResult
   /** What the document is made of (paragraphs, tables, pictures, fonts); reads only. */
   documentProfile(): AgentDocumentProfile
+  /** the font names the document declares; reads only */
+  documentFonts(): string[]
   /** how many pages print, and the 0-based page of the caret */
   pageStatus(): AgentPageStatus
   /** pages for printing from `from` up to `end`, as many as are drawn in about two seconds */

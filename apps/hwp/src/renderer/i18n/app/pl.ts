@@ -36,6 +36,10 @@ export const pl = {
   backupKept: 'Zapisano. Poprzednia wersja została zachowana jako {name}.',
   openedTracked:
     'Ten dokument zawiera śledzone zmiany. Widzisz jego bieżący tekst z zastosowanymi zmianami; zapisanie zachowa ten tekst i usunie historię zmian.',
+  missingFonts: "{count} czcionek jest wyświetlanych zastępczo. Oryginalne nazwy pozostają zachowane, ale podział wierszy i stron może się zmienić.",
+  fontDetails: "Zastępowane czcionki ({count})",
+  fontPolicyDetails: "Dooroo używa tylko czcionek w standardowych folderach systemu. Nie używa czcionek wewnętrznych innych aplikacji ani formatów własnościowych takich jak HFT. Poniższe czcionki są wyświetlane zastępczo. Ich oryginalne nazwy są zachowywane przy zapisie, chyba że je zmienisz. Ta sama zasada dotyczy drukowania i eksportu.",
+  fontPolicyLicense: "Sprawdź licencje czcionek instalowanych osobno. Instalacja w standardowym folderze sama w sobie nie daje prawa do używania czcionki.",
   saveTracked:
     'Nie zapisano: ten dokument zawiera śledzone zmiany; zapisanie go tutaj spowodowałoby ich utratę, a pliku Hancom Hangul mógłby nie otworzyć.',
   savedTailsLost:

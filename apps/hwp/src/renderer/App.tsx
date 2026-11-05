@@ -27,6 +27,9 @@ import { useI18n, type StringKey } from './i18n/locale'
 import { MEMO_INSERT_EVENT, memoNoticeOf, type MemoNotice } from './MemoPanel'
 import { MemoSide, MemoToggle, memoPanelInitiallyOpen, rememberMemoPanelOpen } from './MemoSide'
 import { openDocumentsDroppedOn } from './editor-drop'
+import { installHostFonts } from './host-fonts'
+import { hostFontNames, missingFonts } from './font-notice'
+import { FontDetails } from './FontDetails'
 import { hwpPresentationKeyOf } from './presentation-keys'
 import { ExportRangeDialog } from './ExportRangeDialog'
 import { gatherPrintJob } from './print-flow'
@@ -157,6 +160,8 @@ export default function App() {
   const [printSignal, setPrintSignal] = useState(0)
   const prePresentChromeRef = useRef<ChromeVisibility | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const [substitutedFonts, setSubstitutedFonts] = useState<string[]>([])
+  const [fontDetailsOpen, setFontDetailsOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(() => aiPanelInitiallyOpen(AI_OPEN_KEY))
   const [checkOpen, setCheckOpen] = useState(false)
   /** a request the check panel hands to the AI input box; `nonce` says it is a new one */
@@ -250,6 +255,9 @@ export default function App() {
         stopDrop = openDocumentsDroppedOn(editor.element, (files) =>
           window.hwpApi.openDroppedDocuments(files),
         )
+        // Start with generic substitutes while the standard-folder scan finishes. The
+        // provider refreshes layout on arrival; native detection and old caches stay off.
+        const hostFontsReady = installHostFonts(editor.element.contentWindow, window.hwpApi).catch(() => false)
         setPhase('loading')
         if (!path) {
           // a new document: the blank one bundled with the app, which has no file until
@@ -278,6 +286,24 @@ export default function App() {
         setPhase('ready')
         if (await window.hwpApi.trackingDropped().catch(() => false)) {
           if (!disposed) setNotice({ tone: 'info', key: 'openedTracked', sticky: true })
+        }
+        // fonts this PC draws in a substitute: said as the document opens, each time, unless
+        // something else is being said; the notice goes by itself (font-notice.ts)
+        try {
+          await hostFontsReady
+          const [fonts, snapshot] = await Promise.all([
+            agentBridge.documentFonts().catch((): string[] => []),
+            window.hwpApi.hostFonts?.().catch(() => null) ?? Promise.resolve(null),
+          ])
+          if (disposed) return
+          const missing = missingFonts(fonts, hostFontNames(snapshot))
+          setSubstitutedFonts(missing)
+          if (missing.length > 0) {
+            const params = { count: missing.length }
+            setNotice((current) => current ?? { tone: 'info', key: 'missingFonts', params })
+          }
+        } catch {
+          // a notice only: the document is open either way
         }
       } catch (error) {
         if (disposed) return
@@ -975,6 +1001,11 @@ export default function App() {
             {t('checkTitle')}
           </button>
           <MemoToggle open={memoOpen} onToggle={() => setMemoOpen((open) => !open)} />
+          {substitutedFonts.length > 0 && (
+            <button type="button" className="hwp-topbar-button" onClick={() => setFontDetailsOpen(true)}>
+              {t('fontDetails', { count: substitutedFonts.length })}
+            </button>
+          )}
           {!automationMode && <label className={`autosave-toggle${autoSave ? ' on' : ''}`} data-tip={t('autoSaveTip')}>
             <span className="autosave-knob" />
             <span className="autosave-text">{t('autoSave')}</span>
@@ -1054,6 +1085,9 @@ export default function App() {
           )}
         </div>
       </div>
+      {fontDetailsOpen && (
+        <FontDetails names={substitutedFonts} onClose={() => setFontDetailsOpen(false)} />
+      )}
       {preview.open && (
         <PrintPreview
           bridge={agentBridge}

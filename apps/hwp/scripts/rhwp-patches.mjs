@@ -134,11 +134,17 @@
  *   found on the PC, the open document's substitutions) changes only when an
  *   asynchronous step ends, so every later draw asks again.
  *
+ * studio-host-font-synthesis
+ *   With a standard-folder host catalog (src/main/system-fonts.ts), the studio normally
+ *   picks a face only when its weight and slant match the run exactly. For a family with
+ *   no bold or italic face, it now takes the upright face at or below the asked
+ *   weight, and the browser emboldens or slants it as it does for an installed font.
+ *
  * studio-pc-fonts
- *   The studio lists the PC's fonts only after the 찾기 button of its options dialog,
- *   so its font lists held the base fonts and the document's own until then. At start-up
- *   it now asks the PC for its font list and detects anew when that differs from the
- *   kept one (studio-plugin/pc-fonts.mjs), then tells the font lists as the button does.
+ *   Browser font enumeration is disabled in this build. Only the main process's
+ *   standard-folder host catalog supplies names and bytes. Old browser snapshots,
+ *   presence probes and web fonts cannot bypass the policy. Rendering substitutions
+ *   and print SVG filtering never write the replacement name into the document.
  */
 
 import { CLIPBOARD_HTML_MODULE } from '../studio-plugin/clipboard-html.mjs'
@@ -1118,6 +1124,130 @@ const PATCHES = {
     replace:
       'descriptor.set!.call(this, scopedHostCanvasFont(String(value)) ?? memoSubstituteCssFontFamily(String(value)));',
   },
+  'studio-host-font-synthesis': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]local-fonts\.ts$/,
+    edits: [
+      {
+        find: [
+          '  if (styled.length) return styled.length === 1 ? styled[0] : null;',
+          '  // Document styles expose an italic flag, while host catalogs can distinguish',
+          '  // italic from oblique. Prefer the exact slant, then its inclined counterpart.',
+          "  if (style.slant === 'normal') return null;",
+        ].join('\n'),
+        replace: [
+          '  if (styled.length) return styled.length === 1 ? styled[0] : null;',
+          '  // no face of that style: the upright face nearest below the asked weight, which the',
+          '  // browser emboldens or slants as it does an installed font (studio-host-font-synthesis)',
+          '  const upright = candidates.filter(record => record.hostReference?.face.slant === \'normal\'',
+          '    && (record.hostReference?.face.weight ?? 400) <= style.weight);',
+          '  const nearest = upright.length',
+          '    ? Math.max(...upright.map(record => record.hostReference?.face.weight ?? 400)) : -1;',
+          '  const base = upright.filter(record => (record.hostReference?.face.weight ?? 400) === nearest);',
+          '  const synthesized = base.length === 1 ? base[0] : null;',
+          '  // Document styles expose an italic flag, while host catalogs can distinguish',
+          '  // italic from oblique. Prefer the exact slant, then its inclined counterpart.',
+          "  if (style.slant === 'normal') return synthesized;",
+        ].join('\n'),
+      },
+      {
+        find: "  return alternate.length === 1 ? alternate[0] : null;\n}",
+        replace: "  return alternate.length === 1 ? alternate[0] : synthesized;\n}",
+      },
+    ],
+  },
+  'studio-system-font-dialog': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]ui[\\/]char-shape-dialog\.ts$/,
+    edits: [
+      {
+        find: "import { getLocalFonts } from '@/core/local-fonts';",
+        replace: "import { getLocalFonts } from '@/core/local-fonts';\nimport { systemFontFamily } from '@ieum/pc-fonts';",
+      },
+      {
+        find: "if (this.fontSelect?.value) styles.push(`font-family:'${this.fontSelect.value}'`);",
+        replace: 'if (this.fontSelect?.value) styles.push(`font-family:${systemFontFamily(this.fontSelect.value)}`);',
+      },
+    ],
+  },
+  'studio-system-font-catalog': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]local-fonts\.ts$/,
+    edits: [
+  {
+    "find": "import { REGISTERED_FONTS } from './font-loader.ts';",
+    "replace": "import { REGISTERED_FONTS } from './font-loader.ts';\nimport { setSystemFontFaces } from '@ieum/pc-fonts';"
+  },
+  {
+    "find": "return typeof (globalThis as LocalFontGlobal).queryLocalFonts === 'function';",
+    "replace": "return false; // Standard-folder host catalog only."
+  },
+  {
+    "find": "export function isFontPresenceProbeSupported(): boolean {\n  try {\n    const documentLike = (globalThis as LocalFontGlobal).document;\n    const canvas = documentLike?.createElement?.('canvas') as {\n      getContext?: (contextId: '2d') => unknown;\n    } | null | undefined;\n    const context = canvas?.getContext?.('2d') as { measureText?: unknown } | null | undefined;\n    return typeof context?.measureText === 'function';\n  } catch {\n    return false;\n  }\n}\n\n",
+    "replace": "export function isFontPresenceProbeSupported(): boolean { return false; }\n\n"
+  },
+  {
+    "find": "export async function loadStoredLocalFonts(): Promise<LocalFontSnapshot | null> {\n  const snapshot = await readStoredSnapshot();\n  cacheLocalFontSnapshot(snapshot);\n  storageLoaded = true;\n  return snapshot;\n}\n\n",
+    "replace": "export async function loadStoredLocalFonts(): Promise<LocalFontSnapshot | null> {\n  cacheLocalFontSnapshot(null);\n  storageLoaded = true;\n  return null;\n}\n\n"
+  },
+  {
+    "find": "export async function detectLocalFonts(options: DetectLocalFontsOptions = {}): Promise<string[]> {\n  if (!options.force) {\n    if (cachedSnapshot) return getLocalFonts({ includeRegistered: options.includeRegistered });\n    if (!storageLoaded) {\n      await loadStoredLocalFonts();\n      if (cachedSnapshot) return getLocalFonts({ includeRegistered: options.includeRegistered });\n    }\n  }\n\n  const checkedFamilies = normalizeFamilies([\n    ...(cachedSnapshot?.checkedFamilies ?? []),\n    ...(options.candidateFamilies ?? []),\n  ]);\n  let snapshot: LocalFontSnapshot | null = null;\n  if (isLocalFontAccessSupported()) {\n    const queryLocalFonts = (globalThis as LocalFontGlobal).queryLocalFonts!;\n    const fontDataList = await queryLocalFonts();\n    const enumeratedRecords = await collectLocalFontRecords(fontDataList);\n    const probeCandidates = unresolvedCandidateFamilies(enumeratedRecords, checkedFamilies);\n    const probedFamilies = isFontPresenceProbeSupported()\n      ? probeCandidateFamilies(probeCandidates)\n      : [];\n    const records = [\n      ...enumeratedRecords,\n      ...recordsFromFamilies(probedFamilies, 'font-presence-probe'),\n    ];\n    snapshot = makeSnapshot(records, 'local-font-access', {\n      checkedFamilies,\n      probedFamilies,\n      unresolvedFamilies: unresolvedCandidateFamilies(records, checkedFamilies),\n    });\n  } else if (isFontPresenceProbeSupported() && checkedFamilies.length > 0) {\n    const families = probeCandidateFamilies(checkedFamilies);\n    const records = recordsFromFamilies(families, 'font-presence-probe');\n    snapshot = makeSnapshot(records, 'font-presence-probe', {\n      checkedFamilies,\n      probedFamilies: families,\n      unresolvedFamilies: unresolvedCandidateFamilies(records, checkedFamilies),\n    });\n  }\n\n  if (!snapshot) return [];\n\n  localFontBytesByPostscriptName.clear();\n  cacheLocalFontSnapshot(snapshot);\n  storageLoaded = true;\n  await writeStoredSnapshot(snapshot);\n  console.log(`[LocalFonts] ${cachedFontRecords.length}개 로컬 글꼴 감지됨 (${snapshot.source})`);\n  return getLocalFonts({ includeRegistered: options.includeRegistered });\n}\n\n",
+    "replace": "export async function detectLocalFonts(options: DetectLocalFontsOptions = {}): Promise<string[]> {\n  await prepareHostFontCatalog();\n  return getLocalFonts({ includeRegistered: options.includeRegistered });\n}\n\n"
+  },
+  {
+    "find": "  if (options.includeRegistered) return [...cachedFontRecords];\n  return cachedFontRecords.filter(record => !record.aliases.some(name => REGISTERED_FONTS.has(name)));",
+    "replace": "  return currentHostRecords();"
+  },
+  {
+    "find": "  return resolveLocalFontFromLookup(fontName, cachedFontLookup);",
+    "replace": "  currentHostRecords();\n  return resolveLocalFontFromLookup(fontName, hostLookup);"
+  },
+  {
+    "find": "  return hostFontSource.setProvider(provider);",
+    "replace": "  setSystemFontFaces([]);\n  return hostFontSource.setProvider(provider ? {\n    ...provider,\n    getSnapshot: async signal => {\n      const snapshot = await provider.getSnapshot(signal);\n      setSystemFontFaces(snapshot.faces);\n      return snapshot;\n    },\n  } : null);"
+  },
+  {
+    "find": "  if (cachedSnapshot?.source !== 'local-font-access') return bytesByPostscriptName;",
+    "replace": "  return bytesByPostscriptName; // Never read bytes through unfiltered browser enumeration."
+  }
+],
+  },
+  'studio-system-font-display': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]font-substitution\.ts$/,
+    edits: [
+  {
+    "find": "import { resolveLocalFont } from './local-fonts.ts';",
+    "replace": "import { resolveLocalFont } from './local-fonts.ts';\nimport { allowedFontFamilies } from '@ieum/pc-fonts';"
+  },
+  {
+    "find": "  return families\n    .map(name => GENERIC_FONTS.has(name)",
+    "replace": "  return allowedFontFamilies(families)\n    .map(name => GENERIC_FONTS.has(name)"
+  },
+  {
+    "find": "    candidates: families,",
+    "replace": "    candidates: allowedFontFamilies(families),"
+  }
+],
+  },
+  'studio-system-font-supply': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]font-loader\.ts$/,
+    edits: [
+  {
+    "find": "const FONT_LIST: readonly FontEntry[] = FONT_RULE_WEBFONT_ENTRIES;",
+    "replace": "const FONT_LIST: readonly FontEntry[] = []; // No bundled or external web fonts."
+  }
+],
+  },
+  'studio-system-font-canvas-alias': {
+    file: /[\\/]rhwp-studio[\\/]src[\\/]core[\\/]host-canvas-fonts\.ts$/,
+    edits: [
+  {
+    "find": "import { normalizeFontFaceData } from './sfnt-face.ts';",
+    "replace": "import { normalizeFontFaceData } from './sfnt-face.ts';\nimport { allowCanvasFontAlias } from '@ieum/pc-fonts';"
+  },
+  {
+    "find": "            this.fontSet!.add(font);",
+    "replace": "            allowCanvasFontAlias(alias);\n            this.fontSet!.add(font);"
+  }
+],
+  },
   'studio-pc-fonts': {
     file: /[\\/]rhwp-studio[\\/]src[\\/]main\.ts$/,
     edits: [
@@ -1135,7 +1265,7 @@ const PATCHES = {
         replace: [
           '    setupEventListeners();',
           '    void refreshPcFonts({',
-          '      queryLocalFonts: (globalThis as { queryLocalFonts?: () => Promise<{ family: string; fullName: string; postscriptName: string }[]> }).queryLocalFonts?.bind(globalThis),',
+          '      queryLocalFonts: undefined, // standard-folder host catalog only',
           '      loadStored: loadStoredLocalFonts,',
           '      records: () => getLocalFontRecords({ includeRegistered: true }),',
           '      detect: () => detectLocalFonts({ force: true }),',
@@ -1212,6 +1342,12 @@ export const STUDIO_PATCHES = /** @type {const} */ ([
   'studio-font-memo-state',
   'studio-font-memo-use',
   'studio-cell-block-paste',
+  'studio-host-font-synthesis',
+  'studio-system-font-dialog',
+  'studio-system-font-catalog',
+  'studio-system-font-display',
+  'studio-system-font-supply',
+  'studio-system-font-canvas-alias',
   'studio-pc-fonts',
 ])
 

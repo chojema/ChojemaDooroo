@@ -34,6 +34,10 @@ export const zhTW = {
   backupKept: '已儲存。先前的版本保留為 {name}。',
   openedTracked:
     '此文件包含追蹤修訂。畫面上只顯示套用修訂後的目前內容；儲存時會儲存此內容，不保留修訂記錄。',
+  missingFonts: "{count}種字型使用替代字型顯示。原始名稱保持不變，但換行與分頁可能不同。",
+  fontDetails: "替代字型說明（{count}）",
+  fontPolicyDetails: "Dooroo僅使用系統標準字型資料夾中的字型，不使用其他應用程式內部的字型或HFT等專用格式。下列字型使用替代字型顯示；除非手動變更，儲存時保留原始字型名稱。列印與匯出遵循相同規則。",
+  fontPolicyLicense: "請確認另行安裝字型的使用授權。安裝在標準資料夾中並不代表已獲得使用授權。",
   saveTracked:
     '未儲存：此文件包含追蹤修訂，在這裡儲存會遺失修訂記錄，而且儲存的檔案可能無法在 Hancom Hangul 中開啟。',
   savedTailsLost:

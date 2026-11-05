@@ -36,6 +36,10 @@ export const cs = {
   backupKept: 'Uloženo. Předchozí verze byla zachována jako {name}.',
   openedTracked:
     'Tento dokument obsahuje sledované změny. Vidíte jeho aktuální text s použitými změnami; uložením se tento text zachová a záznam změn se odstraní.',
+  missingFonts: "{count} písem se zobrazuje náhradním písmem. Původní názvy zůstávají zachovány, ale zalomení řádků a stránek se může změnit.",
+  fontDetails: "Nahrazovaná písma ({count})",
+  fontPolicyDetails: "Dooroo používá pouze písma ve standardních systémových složkách. Nepoužívá interní písma jiných aplikací ani proprietární formáty jako HFT. Níže uvedená písma se zobrazují náhradně. Jejich původní názvy se při ukládání zachovají, pokud je nezměníte. Stejné pravidlo platí pro tisk a export.",
+  fontPolicyLicense: "Ověřte licence samostatně instalovaných písem. Instalace do standardní složky sama o sobě neuděluje právo písmo používat.",
   saveTracked:
     'Neuloženo: tento dokument obsahuje sledované změny; uložením zde by se ztratily a soubor by Hancom Hangul nemusel otevřít.',
   savedTailsLost:

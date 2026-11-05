@@ -1,5 +1,12 @@
 # 변경 내역
 
+## 0.10.0
+
+- AI 도우미 대화로 MCP를 자동 등록·관리하는 기능 추가(`register_dooroo_mcp`, `unregister_dooroo_mcp`, `register_mcp_server`, `remove_mcp_server`, `list_mcp_status`, `call_mcp_tool`). Claude Desktop, Claude Code, Cursor, Windsurf, Antigravity 설정 파일에 기존 항목을 보존하며 자동 등록하고, 설정 화면에 원클릭 등록 버튼과 연결 상태 표시 추가. 설치본 안에 `mcp.mjs` 내장.
+- 앱 내 AI 도우미에 외부 stdio MCP 서버를 대화로 연결하고 그 도구를 `mcp__<server>__<tool>` 형태로 바로 호출.
+- 글꼴은 macOS와 Windows의 표준 시스템 및 사용자 글꼴 폴더에 있는 것만 사용. 편집, 미리보기, 인쇄와 내보내기에 같은 기준 적용.
+- 문서에 이 PC에 없는 글꼴이 있으면 열 때 알리고, 대체 표시 중에도 원본 글꼴 이름을 보존. 상단의 `대체 글꼴 안내`에서 전체 목록, 사용 범위와 별도 설치 글꼴의 사용권 확인 안내를 다시 열 수 있음. README에 `글꼴` 항목 추가.
+
 ## 0.7.0
 
 - 로컬 stdio MCP 서버 추가. 문서 열기와 생성, 텍스트 조회와 교체, 문단 삽입, 표 조회와 편집, HWP/HWPX 저장을 외부 MCP 클라이언트에서 호출할 수 있음.

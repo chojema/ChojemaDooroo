@@ -17,6 +17,73 @@
 /** Module specifier the studio-pc-fonts patch imports; build-studio.mjs aliases it. */
 export const PC_FONTS_MODULE = '@ieum/pc-fonts'
 
+// The main process supplies these names from standard OS font folders only.
+// No browser presence test, application scan or saved font list can add a name.
+const genericFamilies = new Set(['serif', 'sans-serif', 'monospace', 'cursive', 'fantasy',
+  'system-ui', 'ui-serif', 'ui-sans-serif', 'ui-monospace', 'ui-rounded', 'emoji', 'math', 'fangsong'])
+let systemNames = new Map()
+const canvasAliases = new Set()
+
+export function setSystemFontFaces(faces) {
+  systemNames = new Map()
+  canvasAliases.clear()
+  for (const face of faces) {
+    for (const name of [face.family, face.fullName, face.postscriptName, ...(face.aliases ?? [])]) {
+      if (alias(name)) systemNames.set(alias(name), name)
+    }
+  }
+}
+
+/** Only aliases registered after a standard-folder FontFace loaded successfully. */
+export function allowCanvasFontAlias(name) { canvasAliases.add(name) }
+
+export function allowedFontFamilies(families) {
+  const allowed = families.filter(name => genericFamilies.has(alias(name))
+    || systemNames.has(alias(name)) || canvasAliases.has(name))
+  return allowed.length ? allowed : ['sans-serif']
+}
+
+function familyList(text) {
+  const names = []
+  let name = '', quote = '', escaped = false
+  for (const char of text) {
+    if (escaped) { name += char; escaped = false }
+    else if (char === '\\') escaped = true
+    else if (quote) { if (char === quote) quote = ''; else name += char }
+    else if (char === '"' || char === "'") quote = char
+    else if (char === ',') { if (name.trim()) names.push(name.trim()); name = '' }
+    else name += char
+  }
+  if (name.trim()) names.push(name.trim())
+  return names
+}
+
+/** Rendering only: never pass this string back to document formatting commands. */
+export function systemFontFamily(text) {
+  return allowedFontFamilies(familyList(text)).map(name => genericFamilies.has(alias(name))
+    ? alias(name) : `"${name.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(', ')
+}
+
+const xmlDecode = text => text.replace(/&(?:quot|apos|amp|lt|gt);|&#(?:x[0-9a-f]+|\d+);/gi, entity => {
+  const named = { '&quot;': '"', '&apos;': "'", '&amp;': '&', '&lt;': '<', '&gt;': '>' }
+  if (named[entity]) return named[entity]
+  const code = entity.startsWith('&#x') ? parseInt(entity.slice(3), 16) : parseInt(entity.slice(2), 10)
+  return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : ''
+})
+const xmlEncode = text => text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&apos;').replace(/</g, '&lt;')
+
+/** The engine emits presentation font-family attributes. Filter the rendered SVG,
+ * including style declarations, without touching the document's stored font names. */
+export function systemFontSvg(svg) {
+  return svg.replace(/\bfont-family\s*=\s*(["'])(.*?)\1/gi,
+    (_match, quote, value) => `font-family=${quote}${xmlEncode(systemFontFamily(xmlDecode(value)))}${quote}`)
+    .replace(/\bstyle\s*=\s*(["'])(.*?)\1/gi, (_match, quote, value) => {
+      const style = xmlDecode(value).replace(/\bfont-family\s*:\s*([^;}]+)/gi,
+        (_property, families) => `font-family:${systemFontFamily(families)}`)
+      return `style=${quote}${xmlEncode(style)}${quote}`
+    })
+}
+
 /** A font name the way the studio compares them (its `normalizeFontAlias`). */
 const alias = (value) =>
   typeof value === 'string'

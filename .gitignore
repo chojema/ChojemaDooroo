@@ -7,6 +7,7 @@ node_modules/
 apps/hwp/public/studio/
 apps/desktop/build/THIRD-PARTY-NOTICES.txt
 .work/
+output/playwright/
 .mesh/
 .agents/
 .codex/

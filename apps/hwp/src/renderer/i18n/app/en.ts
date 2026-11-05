@@ -35,6 +35,10 @@ export const en = {
   backupKept: 'Saved. The previous version was kept as {name}.',
   openedTracked:
     'This document has tracked changes. You see its current text, with the changes applied; saving keeps this text and drops the record of changes.',
+  missingFonts: "{count} fonts are displayed using substitutes. Original names are preserved, but line breaks and pagination may differ.",
+  fontDetails: "Font substitutions ({count})",
+  fontPolicyDetails: "Dooroo uses only fonts in standard system font folders. Fonts inside other apps and proprietary formats such as HFT are not used. The fonts below are displayed using substitutes. Original font names are preserved on save unless you change them. The same policy applies to printing and export.",
+  fontPolicyLicense: "Check the licenses of fonts you install separately. Installation in a standard folder does not establish permission to use a font.",
   saveTracked:
     'Not saved: this document has tracked changes, and saving it here would lose them and may write a file Hancom Hangul cannot open.',
   savedTailsLost:

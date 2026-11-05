@@ -36,6 +36,10 @@ export const ms = {
   backupKept: 'Disimpan. Versi sebelumnya disimpan sebagai {name}.',
   openedTracked:
     'Dokumen ini mengandungi perubahan yang dijejak. Anda melihat teks semasanya, dengan perubahan digunakan; menyimpan akan mengekalkan teks ini dan membuang rekod perubahan.',
+  missingFonts: "{count} fon dipaparkan menggunakan pengganti. Nama asal dikekalkan, tetapi pemisahan baris dan halaman mungkin berubah.",
+  fontDetails: "Fon gantian ({count})",
+  fontPolicyDetails: "Dooroo hanya menggunakan fon dalam folder fon standard sistem. Fon dalaman aplikasi lain dan format khusus seperti HFT tidak digunakan. Fon berikut dipaparkan menggunakan pengganti. Nama asal dikekalkan semasa menyimpan melainkan anda mengubahnya. Dasar yang sama digunakan untuk cetakan dan eksport.",
+  fontPolicyLicense: "Semak lesen fon yang dipasang secara berasingan. Pemasangan dalam folder standard sahaja tidak memberikan kebenaran penggunaan.",
   saveTracked:
     'Tidak disimpan: dokumen ini mempunyai penjejakan perubahan; menyimpannya di sini akan menghilangkannya dan mungkin menghasilkan fail yang tidak dapat dibuka oleh Hancom Hangul.',
   savedTailsLost:

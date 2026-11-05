@@ -18,6 +18,7 @@ module.exports = {
   extraResources: [
     { from: '../hwp/out/renderer', to: 'modules/hwp/renderer' },
     { from: '../hwp/out/preload', to: 'modules/hwp/preload' },
+    { from: '../../tools/mcp.mjs', to: 'mcp.mjs' },
     { from: '../../vendor/rhwp-core/rhwp_bg.wasm', to: 'wasm/rhwp_bg.wasm' },
     // pdf.js data for bringing in PDFs: character maps (Korean, Chinese, Japanese text) and standard fonts
     { from: '../../node_modules/pdfjs-dist/cmaps', to: 'pdfjs/cmaps' },

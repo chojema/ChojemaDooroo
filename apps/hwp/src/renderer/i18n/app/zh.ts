@@ -33,6 +33,10 @@ export const zh = {
   backupKept: '已保存。之前的版本保留为 {name}。',
   openedTracked:
     '此文档包含修订记录。屏幕上只显示应用修订后的当前内容；保存时将保存此内容，不保留修订记录。',
+  missingFonts: "{count}种字体使用替代字体显示。原始名称保持不变，但换行和分页可能不同。",
+  fontDetails: "替代字体说明（{count}）",
+  fontPolicyDetails: "Dooroo仅使用系统标准字体文件夹中的字体，不使用其他应用内部的字体或HFT等专用格式。下列字体使用替代字体显示；除非手动更改，保存时保留原始字体名称。打印和导出遵循相同规则。",
+  fontPolicyLicense: "请确认另行安装字体的使用许可。安装在标准文件夹中并不代表已获得使用授权。",
   saveTracked:
     '未保存：此文档包含修订记录，在这里保存会丢失修订记录，并且保存的文件可能无法在 Hancom Hangul 中打开。',
   savedTailsLost:

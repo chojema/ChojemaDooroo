@@ -36,6 +36,10 @@ export const nl = {
   backupKept: 'Opgeslagen. De vorige versie is bewaard als {name}.',
   openedTracked:
     'Dit document bevat bijgehouden wijzigingen. U ziet de huidige tekst, met de wijzigingen verwerkt; bij opslaan blijft deze tekst behouden en vervalt het overzicht van wijzigingen.',
+  missingFonts: "{count} lettertypen worden vervangen weergegeven. De oorspronkelijke namen blijven bewaard, maar regel- en pagina-einden kunnen veranderen.",
+  fontDetails: "Vervangen lettertypen ({count})",
+  fontPolicyDetails: "Dooroo gebruikt alleen lettertypen in de standaardmappen van het systeem. Lettertypen uit andere apps en eigen formaten zoals HFT worden niet gebruikt. De onderstaande lettertypen worden vervangen weergegeven. Hun oorspronkelijke namen blijven bij het opslaan bewaard, tenzij u ze wijzigt. Dit geldt ook voor afdrukken en exporteren.",
+  fontPolicyLicense: "Controleer de licenties van apart geïnstalleerde lettertypen. Installatie in een standaardmap geeft op zichzelf geen gebruiksrecht.",
   saveTracked:
     'Niet opgeslagen: dit document bevat bijgehouden wijzigingen; door het hier op te slaan gaan ze verloren en kan Hancom Hangul het bestand mogelijk niet openen.',
   savedTailsLost:

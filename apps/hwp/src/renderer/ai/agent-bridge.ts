@@ -21,6 +21,7 @@ const METHODS = [
   'listPictures',
   'readPicture',
   'documentProfile',
+  'documentFonts',
   'findText',
   'replaceText',
   'replaceAllText',

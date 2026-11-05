@@ -36,6 +36,10 @@ export const de = {
   backupKept: 'Gespeichert. Die vorherige Version wurde als {name} aufbewahrt.',
   openedTracked:
     'Dieses Dokument enthält nachverfolgte Änderungen. Angezeigt wird der aktuelle Text mit übernommenen Änderungen; beim Speichern bleibt dieser Text erhalten, die Änderungsverfolgung entfällt.',
+  missingFonts: "{count} Schriftarten werden ersetzt angezeigt. Die Originalnamen bleiben erhalten, Zeilen- und Seitenumbrüche können sich ändern.",
+  fontDetails: "Schriftersetzungen ({count})",
+  fontPolicyDetails: "Dooroo verwendet nur Schriftarten in den Standard-Schriftordnern des Systems. Schriften anderer Apps und proprietäre Formate wie HFT werden nicht geladen. Die folgenden Schriften werden ersetzt angezeigt. Beim Speichern bleiben ihre Namen erhalten, sofern Sie sie nicht ändern. Dies gilt auch für Druck und Export.",
+  fontPolicyLicense: "Prüfen Sie die Lizenzen separat installierter Schriften. Die Installation in einem Standardordner allein erlaubt noch keine Nutzung.",
   saveTracked:
     'Nicht gespeichert: Dieses Dokument enthält nachverfolgte Änderungen. Beim Speichern hier gingen sie verloren, und Hancom Hangul könnte die Datei nicht öffnen.',
   savedTailsLost:

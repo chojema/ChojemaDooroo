@@ -14,6 +14,7 @@
  */
 
 import { installDialogTheme } from './dialog-theme.mjs'
+import { systemFontSvg } from './pc-fonts.mjs'
 
 export const AGENT_PLUGIN_ID = 'ieum-agent'
 
@@ -4594,6 +4595,17 @@ export const agentPlugin = {
        */
       documentProfile: guarded(() => host.read(profileOf)),
 
+      /**
+       * The font names the document declares (the engine's `fontsUsed`), for the notice that
+       * some are not on this PC. Reads only.
+       */
+      documentFonts: guarded(() =>
+        host.read((doc) => {
+          const fonts = parse(doc.getDocumentInfo()).fontsUsed
+          return Array.isArray(fonts) ? fonts.filter((name) => typeof name === 'string') : []
+        }),
+      ),
+
       /** Where a piece of text occurs. Exact, case-sensitive. */
       findText: guarded((find) =>
         host.read((doc) => {
@@ -5268,7 +5280,8 @@ export const agentPlugin = {
             const pages = []
             const stop = Number.isInteger(end) ? Math.min(end, pageCount) : pageCount
             for (let page = start; page < stop; page++) {
-              pages.push(printPageOf(doc, page))
+              const printed = printPageOf(doc, page)
+              pages.push({ ...printed, svg: systemFontSvg(printed.svg) })
               if (Date.now() - began > PRINT_BATCH_MS) break
             }
             return { pageCount, from: start, pages }
@@ -5293,7 +5306,7 @@ export const agentPlugin = {
             return {
               pageCount,
               page,
-              svg: doc.renderPageSvgWithProfile(page, 'print'),
+              svg: systemFontSvg(doc.renderPageSvgWithProfile(page, 'print')),
               width: info.width,
               height: info.height,
               margins: {

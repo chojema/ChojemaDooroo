@@ -103,3 +103,17 @@ describe('documentProfile', () => {
     expect(Buffer.from(after).equals(Buffer.from(before))).toBe(true)
   })
 })
+
+describe('documentFonts', () => {
+  it('lists the font names the document declares, as text', () => {
+    const fonts = activate(bodyWithTable()).documentFonts()
+    expect(fonts.length).toBeGreaterThan(0)
+    expect(fonts.every((name) => typeof name === 'string' && name.length > 0)).toBe(true)
+  })
+
+  it('reads a file’s own font names', () => {
+    const fixture = join(__dirname, 'fixtures', 'memo.hwpx')
+    const doc = new HwpDocument(new Uint8Array(readFileSync(fixture)))
+    expect(activate(doc).documentFonts()).toEqual(expect.arrayContaining(['함초롬바탕', '함초롬돋움']))
+  })
+})

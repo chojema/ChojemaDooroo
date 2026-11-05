@@ -799,3 +799,20 @@ body {
     opacity: 0.9;
   }
 }
+.font-details {
+  width: min(36rem, calc(100vw - 3rem));
+  max-height: calc(100vh - 4rem);
+  overflow: auto;
+  border: 1px solid var(--border, #b9bec8);
+  border-radius: 8px;
+  padding: 24px;
+  color: var(--text, #20242c);
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 40px #0003;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.font-details::backdrop { background: #0006; }
+.font-details h2 { margin: 0 0 16px; font-size: 18px; }
+.font-details ul { max-height: 35vh; overflow: auto; overflow-wrap: anywhere; }
+.font-details button { float: inline-end; padding: 6px 18px; }

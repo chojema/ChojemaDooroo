@@ -36,6 +36,10 @@ export const id = {
   backupKept: 'Tersimpan. Versi sebelumnya disimpan sebagai {name}.',
   openedTracked:
     'Dokumen ini berisi pelacakan perubahan. Anda melihat teks terkininya, dengan perubahan diterapkan; menyimpan akan mempertahankan teks ini dan menghapus catatan perubahan.',
+  missingFonts: "{count} font ditampilkan dengan pengganti. Nama asli dipertahankan, tetapi pergantian baris dan halaman dapat berubah.",
+  fontDetails: "Font pengganti ({count})",
+  fontPolicyDetails: "Dooroo hanya menggunakan font di folder font standar sistem. Font internal aplikasi lain dan format khusus seperti HFT tidak digunakan. Font berikut ditampilkan dengan pengganti. Nama asli dipertahankan saat menyimpan kecuali Anda mengubahnya. Aturan yang sama berlaku untuk mencetak dan mengekspor.",
+  fontPolicyLicense: "Periksa lisensi font yang dipasang secara terpisah. Pemasangan di folder standar tidak dengan sendirinya memberikan izin penggunaan.",
   saveTracked:
     'Tidak disimpan: dokumen ini memiliki pelacakan perubahan; menyimpannya di sini akan menghilangkannya dan dapat menghasilkan file yang tidak bisa dibuka Hancom Hangul.',
   savedTailsLost:

@@ -21,6 +21,10 @@ export const HWP_CHANNELS = {
   fileCommand: 'hwp:file-command',
   appMenu: 'hwp:app-menu',
   printPages: 'hwp:print-pages',
+  /** invoke → HostFontSnapshotInfo: fonts from standard system and user font folders only */
+  hostFonts: 'hwp:host-fonts',
+  /** invoke(id, revision) → `{ bytes, faceIndex } | null`: one listed face's file */
+  hostFontRead: 'hwp:host-font-read',
   dirtyChanged: 'hwp:dirty-changed',
   closeSaveRequest: 'hwp:close-save-request',
   closeSaveResult: 'hwp:close-save-result',
@@ -90,6 +94,45 @@ export const AI_CHANNELS = {
   /** () �� `AiToolCapabilities | null`, registered by the docs main (shell mode only) */
   toolCapabilities: 'ai:tool-capabilities',
 } as const
+
+export const MCP_MANAGE_CHANNELS = {
+  hostStatus: 'mcp:host-status',
+  hostRegister: 'mcp:host-register',
+  hostUnregister: 'mcp:host-unregister',
+  serversList: 'mcp:servers-list',
+  serverRegister: 'mcp:server-register',
+  serverRemove: 'mcp:server-remove',
+  toolCall: 'mcp:tool-call',
+} as const
+
+export interface McpHostStatusInfo {
+  id: string
+  label: string
+  configPath: string
+  configExists: boolean
+  registered: boolean
+  roots: string[]
+  readOnly: boolean
+}
+
+export interface McpServerStatusInfo {
+  name: string
+  command: string
+  args: string[]
+  enabled: boolean
+  connected: boolean
+  toolCount: number
+  tools: string[]
+  error?: string
+}
+
+export interface McpConnectedToolInfo {
+  server: string
+  toolName: string
+  qualifiedName: string
+  description: string
+  inputSchema: Record<string, unknown>
+}
 
 export type UiTheme = 'light' | 'dark' | 'system'
 export type SaveMode = 'save' | 'saveAs'
@@ -329,7 +372,28 @@ export type ReadUrlResult =
     }
   | { ok: false; error: string; errorCode: string }
 
+/** One face from a standard font folder, as the editor's host font provider takes it. */
+export interface HostFontFaceInfo {
+  id: string
+  family: string
+  fullName: string
+  postscriptName: string
+  style: string
+  aliases: string[]
+  weight: number
+  slant: 'normal' | 'italic' | 'oblique'
+}
+
+export interface HostFontSnapshotInfo {
+  revision: string
+  faces: HostFontFaceInfo[]
+}
+
 export interface HwpApi {
+  /** fonts from standard OS and user font folders; no application-private resources */
+  hostFonts?(): Promise<HostFontSnapshotInfo>
+  /** one face of that list: its file's bytes, or null when the list has changed */
+  hostFontRead?(id: string, revision: string): Promise<{ bytes: Uint8Array; faceIndex: number } | null>
   /** path queued for this view when its tab was created; null for a view opened without a file */
   consumePending(): Promise<string | null>
   /** the pending path is an untitled copy (a skill template's): its name and format; null otherwise */
@@ -461,4 +525,31 @@ export interface HwpApi {
   /** which search/media tools can run right now — gates generate_image */
   aiToolCapabilities(): Promise<AiToolCapabilities | null>
   onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
+  /** MCP host registration and external MCP server connections */
+  mcpHostStatus?(): Promise<{ hosts: McpHostStatusInfo[] }>
+  mcpHostRegister?(options: { clients?: string[]; roots?: string[]; readOnly?: boolean }): Promise<{
+    ok: boolean
+    runnerPath: string
+    appExecutable: string | null
+    roots: string[]
+    readOnly: boolean
+    updated: Array<{ client: string; label: string; configPath: string }>
+    errors?: string[]
+  }>
+  mcpHostUnregister?(options: { clients?: string[] }): Promise<{ ok: boolean; removed: string[] }>
+  mcpServersList?(): Promise<{ servers: McpServerStatusInfo[]; tools: McpConnectedToolInfo[] }>
+  mcpServerRegister?(config: {
+    name: string
+    command: string
+    args?: string[]
+    env?: Record<string, string>
+    enabled?: boolean
+  }): Promise<McpServerStatusInfo>
+  mcpServerRemove?(name: string): Promise<{ ok: boolean; removed: boolean }>
+  mcpToolCall?(args: {
+    qualifiedName?: string
+    server?: string
+    tool?: string
+    input?: Record<string, unknown>
+  }): Promise<{ ok: boolean; output: string; isError?: boolean }>
 }

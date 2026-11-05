@@ -111,8 +111,13 @@ function pageSvg(page: PrintPage, index: number, picture: (index: number) => str
 /**
  * The HTML of the pages: each page on a paper of its own size with no margin, the page's
  * pictures pointing at `picture(i)` (a file name next to the HTML, or the data URL).
+ * `fontCss` holds the `@font-face` rules of approved standard-folder fonts (system-fonts.ts).
  */
-export function printableHtml(pages: PrintPage[], picture: (index: number) => string): string {
+export function printableHtml(
+  pages: PrintPage[],
+  picture: (index: number) => string,
+  fontCss = '',
+): string {
   const rules: string[] = []
   const body: string[] = []
   pages.forEach((page, index) => {
@@ -135,6 +140,7 @@ export function printableHtml(pages: PrintPage[], picture: (index: number) => st
     '.page { overflow: hidden; break-after: page; }',
     '.page:last-child { break-after: auto; }',
     '.page > svg { display: block; width: 100%; height: 100%; }',
+    ...(fontCss ? [fontCss] : []),
     ...rules,
     '</style>',
     '</head>',
@@ -155,7 +161,11 @@ const DRAWN_MARK = '#f0f'
 const DRAWN_MARK_ROWS = 1
 
 /** The HTML of one page as a picture: the page fills the window above the drawn mark, on white. */
-export function pageImageHtml(page: PrintPage, picture: (index: number) => string): string {
+export function pageImageHtml(
+  page: PrintPage,
+  picture: (index: number) => string,
+  fontCss = '',
+): string {
   return [
     '<!DOCTYPE html>',
     '<html>',
@@ -167,6 +177,7 @@ export function pageImageHtml(page: PrintPage, picture: (index: number) => strin
     'html, body { width: 100%; height: 100%; overflow: hidden; background: #fff; }',
     `svg { display: block; width: 100%; height: calc(100% - ${DRAWN_MARK_ROWS}px); }`,
     `.drawn { height: ${DRAWN_MARK_ROWS}px; background: ${DRAWN_MARK}; }`,
+    ...(fontCss ? [fontCss] : []),
     '</style>',
     '</head>',
     `<body>${pageSvg(page, 0, picture)}<div class="drawn"></div></body>`,
@@ -279,10 +290,11 @@ function withPrintWindow<T>(
   job: PrintJob,
   createWindow: () => PrintWindow,
   use: (win: PrintWindow) => Promise<T>,
+  fontCss = '',
 ): Promise<T> {
   return withJobFolder(job, async (dir, picture) => {
     const htmlPath = join(dir, 'print.html')
-    await writeFile(htmlPath, printableHtml(job.pages, picture), 'utf8')
+    await writeFile(htmlPath, printableHtml(job.pages, picture, fontCss), 'utf8')
     const win = createWindow()
     try {
       await win.loadFile(htmlPath)
@@ -303,6 +315,7 @@ export function printJobToImages(
   format: ImageFormat,
   createWindow: () => ImageWindow,
   save: (index: number, bytes: Buffer) => Promise<void>,
+  fontCss = '',
 ): Promise<void> {
   return withJobFolder(job, async (dir, picture) => {
     const win = createWindow()
@@ -312,7 +325,7 @@ export function printJobToImages(
         const height = Math.max(1, Math.round(page.height * IMAGE_SCALE))
         win.setContentSize(width, height + DRAWN_MARK_ROWS)
         const htmlPath = join(dir, `page-${index}.html`)
-        await writeFile(htmlPath, pageImageHtml(page, picture), 'utf8')
+        await writeFile(htmlPath, pageImageHtml(page, picture, fontCss), 'utf8')
         await win.loadFile(htmlPath)
         const image = await drawnFrame(win, width, height)
         if (!image) throw new Error(`page ${index + 1} could not be drawn`)
@@ -325,13 +338,21 @@ export function printJobToImages(
 }
 
 /** The pages as PDF bytes, each page on its own paper. */
-export function printJobToPdf(job: PrintJob, createWindow: () => PrintWindow): Promise<Buffer> {
-  return withPrintWindow(job, createWindow, (win) =>
-    win.webContents.printToPDF({
-      preferCSSPageSize: true,
-      printBackground: true,
-      margins: { top: 0, bottom: 0, left: 0, right: 0 },
-    }),
+export function printJobToPdf(
+  job: PrintJob,
+  createWindow: () => PrintWindow,
+  fontCss = '',
+): Promise<Buffer> {
+  return withPrintWindow(
+    job,
+    createWindow,
+    (win) =>
+      win.webContents.printToPDF({
+        preferCSSPageSize: true,
+        printBackground: true,
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      }),
+    fontCss,
   )
 }
 
@@ -342,6 +363,7 @@ export function printJobToPdf(job: PrintJob, createWindow: () => PrintWindow): P
 export function printJobToPrinter(
   job: PrintJob,
   createWindow: () => PrintWindow,
+  fontCss = '',
 ): Promise<boolean> {
   return withPrintWindow(
     job,
@@ -356,5 +378,6 @@ export function printJobToPrinter(
           },
         )
       }),
+    fontCss,
   )
 }

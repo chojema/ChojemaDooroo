@@ -36,6 +36,10 @@ export const fr = {
   backupKept: 'Enregistré. La version précédente a été conservée sous le nom {name}.',
   openedTracked:
     'Ce document contient des modifications suivies. Vous voyez son texte actuel, modifications appliquées ; l’enregistrement conserve ce texte et supprime l’historique des modifications.',
+  missingFonts: "{count} polices sont remplacées à l’affichage. Leurs noms sont conservés, mais les retours à la ligne et la pagination peuvent varier.",
+  fontDetails: "Polices de remplacement ({count})",
+  fontPolicyDetails: "Dooroo utilise uniquement les polices des dossiers standard du système, sans charger celles d’autres applications ni les formats propriétaires tels que HFT. Les polices ci-dessous sont remplacées à l’affichage. Leurs noms sont conservés à l’enregistrement sauf modification explicite. Cette règle s’applique aussi à l’impression et à l’exportation.",
+  fontPolicyLicense: "Vérifiez les licences des polices installées séparément. Leur présence dans un dossier standard ne garantit pas le droit de les utiliser.",
   saveTracked:
     "Non enregistré : ce document contient des modifications suivies ; l'enregistrer ici les ferait perdre et pourrait produire un fichier que Hancom Hangul ne peut pas ouvrir.",
   savedTailsLost:

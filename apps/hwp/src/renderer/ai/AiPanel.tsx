@@ -67,6 +67,7 @@ import type { AgentBridge } from './agent-bridge'
 import { blockedRunOf, type AiBlockedRun } from './ai-connection'
 import { AttachmentList, MAX_IMAGES_PER_MESSAGE, PASTE_MIME_EXT } from './attachments'
 import { createFilesSkill } from './files-skill'
+import { createMcpSkill } from './mcp-skill'
 import {
   SELECTION_POLL_MS,
   countWords,
@@ -645,6 +646,9 @@ export function AiPanel({
           .map((attachment) => attachment.name),
     })
 
+  const mcpSkillRef = useRef<ReturnType<typeof createMcpSkill> | null>(null)
+  if (!mcpSkillRef.current) mcpSkillRef.current = createMcpSkill()
+
   // The loop is built once; every mutable value goes through a ref getter
   const loopRef = useRef<AgentLoop | null>(null)
   if (!loopRef.current) {
@@ -656,6 +660,7 @@ export function AiPanel({
       skill: composeWithDrive('hwp+files', '', () => loopRef.current?.messages ?? [], [
         skillRef.current.skill,
         createFilesSkill(() => availableAttachmentsRef.current()),
+        mcpSkillRef.current.skill,
         // the person's skills: use_skill, read_skill_file, propose_skill (app-run tools)
         ...panelUserSkills({
           lang: () => langRef.current,
@@ -877,6 +882,7 @@ export function AiPanel({
           bridgeRef.current.foreignChanges().catch(() => null),
           sentAtts.length > 0 ? collectImages(sentAtts) : Promise.resolve([]),
           skillRef.current!.refreshContext(),
+          mcpSkillRef.current!.refreshTools(),
         ])
         settingsRef.current = settings
         runForeignRef.current = foreign

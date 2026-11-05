@@ -6,6 +6,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { rm } from 'node:fs/promises'
 import { configureAssistant, registerAiIpc, registerProjectIpc, assistantSetup, saveAssistantSetup } from '../services/main/assistant'
 import {
+  getExternalMcpHostStatuses,
+  registerDoorooInExternalHosts,
+  unregisterDoorooFromExternalHosts,
+  registerMcpManageIpc,
+  sharedMcpRegistry,
+  type ExternalMcpClientId,
+} from '../services/main/mcp-setup'
+import {
   configureHwpRuntime, createHwpView, requestHwpClose,
   requestHwpSave, requestHwpPrint, setHwpFileSavedHook,
 } from '../../../hwp/src/main/hwp-main'
@@ -330,6 +338,11 @@ ipcMain.handle(CHANNEL, async (event, action: unknown, value: unknown) => {
       case 'state': return publish(host)
       case 'assistant-get': return assistantSetup()
       case 'assistant-save': return saveAssistantSetup(value)
+      case 'mcp-status': return { hosts: getExternalMcpHostStatuses(), servers: await sharedMcpRegistry.getStatuses() }
+      case 'mcp-host-register': return registerDoorooInExternalHosts((value && typeof value === 'object' ? value : {}) as { clients?: ExternalMcpClientId[]; roots?: string[]; readOnly?: boolean })
+      case 'mcp-host-unregister': return unregisterDoorooFromExternalHosts(Array.isArray(value) ? (value as ExternalMcpClientId[]) : undefined)
+      case 'mcp-server-register': return await sharedMcpRegistry.addOrUpdateServer(value)
+      case 'mcp-server-remove': return await sharedMcpRegistry.removeServer(String(value ?? ''))
       case 'new-hwp': openTab(host, 'hwp'); break
       case 'open': await openDialog(host); break
       case 'open-path': await openPath(host, value); break
@@ -503,7 +516,7 @@ else {
     setAiSecretCodec(safeStorageCodec(safeStorage, process.platform, () => sealingKeyOnDisk(join(app.getPath('userData'), 'Local State'))))
     sealStoredAiSettings(join(app.getPath('userData'), 'ai-settings.json'))
     installRendererProtocol({ hwp: join(outFor('hwp'), 'renderer') })
-    registerAiIpc(); registerProjectIpc(); registerSharedIpc()
+    registerAiIpc(); registerProjectIpc(); registerSharedIpc(); registerMcpManageIpc()
     await initSubscriptionChildTracking(app.getPath('userData')).catch(() => {})
     installMenu()
     const host = createHost()
