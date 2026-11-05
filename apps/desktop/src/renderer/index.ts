@@ -173,6 +173,7 @@ function render(state: AppState) {
       event.preventDefault()
       const local = provider.value === 'ollama'
       if (local && !ollamaModel.value) { document.querySelector('#assistant-result')!.textContent = 'Ollama 모델을 먼저 받아 주세요.'; return }
+      if (local) document.querySelector('#assistant-result')!.textContent = '모델을 불러오는 중입니다. 처음에는 시간이 걸릴 수 있습니다…'
       void command('assistant-save', local ? { provider: 'ollama', model: ollamaModel.value } : { provider: provider.value, model: model.value, apiKey: key.value, baseUrl: base.value }).then((result) => {
         if (result) { key.value = ''; document.querySelector('#assistant-result')!.textContent = '저장했습니다.' }
       })

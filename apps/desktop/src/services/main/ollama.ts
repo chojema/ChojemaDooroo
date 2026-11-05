@@ -106,7 +106,30 @@ export function isOllamaSelected(settings: AiSettings): boolean {
   return settings.provider === 'custom' && settings.customEndpoint === OLLAMA_ENDPOINT_ID
 }
 
+/**
+ * Load `model` without generating anything, so Ollama reports the window it actually
+ * runs it with. Loading a large model the first time can take a while.
+ */
+async function loadOllamaModel(model: string): Promise<boolean> {
+  try {
+    const response = await fetch(new URL('/api/generate', OLLAMA_BASE_URL), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: '', stream: false, keep_alive: '5m' }),
+      signal: AbortSignal.timeout(180_000),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
 export async function selectOllamaModel(settings: AiSettings, model: string): Promise<AiSettings> {
-  const inspection = await inspectLocalModel({ baseUrl: OLLAMA_BASE_URL, model, server: 'ollama' })
+  let inspection = await inspectLocalModel({ baseUrl: OLLAMA_BASE_URL, model, server: 'ollama' })
+  // not loaded yet: its running window is unknown, and guessing either way misleads
+  // (too small refuses every request, the built window overstates what Ollama uses)
+  if (inspection.ok && inspection.profile.runningContextLength === undefined && (await loadOllamaModel(model))) {
+    inspection = await inspectLocalModel({ baseUrl: OLLAMA_BASE_URL, model, server: 'ollama' })
+  }
   return withOllamaModel(settings, model, inspection)
 }
