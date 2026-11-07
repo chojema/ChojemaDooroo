@@ -79,6 +79,42 @@ try {
   const filters = await app.evaluate(() => globalThis.__chojemaSaveFilters)
   assert.deepEqual(filters[0].extensions, ['hwpx'])
   await home.getByRole('tab', { name: /smoke.hwpx/ }).waitFor()
+  // Word is the first-run interface, including behavioral paragraph options.
+  assert.equal(await studio.locator('[data-i18n="menu.insert"]').innerText(), '삽입')
+  assert.equal(await studio.locator('[data-i18n="menu.page"]').innerText(), '레이아웃')
+  assert.equal((await studio.locator('[data-i18n-lines="ui.iconToolbarViewport.toolbarLabel.x05c63e"]').innerText()).replace(/\s/g, ''), '잘라내기')
+  assert.equal((await studio.locator('[data-i18n-lines="command.view.ctrlMark.toolbarLabel"]').innerText()).replace(/\s/g, ''), '서식기호')
+  await studio.locator('[data-i18n="menu.format"]').click()
+  await studio.locator('.md-item[data-cmd="format:para-shape"]').click()
+  const firstPara = studio.locator('.ps-dialog')
+  await firstPara.locator('.dialog-tab[data-tab="extended"]').click()
+  await firstPara.getByLabel('단락의 첫 줄이나 마지막 줄 분리 방지(K)', { exact: true }).waitFor()
+  await firstPara.getByLabel('다음 단락과의 사이에 페이지 나누지 않음(N)', { exact: true }).waitFor()
+  assert.equal(await firstPara.locator('.dialog-tab[data-tab="extended"]').innerText(), '줄 및 페이지 나누기')
+  const layout = await firstPara.evaluate((dialog) => {
+    const bounds = dialog.getBoundingClientRect()
+    const labels = Array.from(dialog.querySelectorAll('.dialog-tab-panel[data-tab="extended"] .dialog-checkbox'))
+    return {
+      clipped: labels.some((label) => { const r = label.getBoundingClientRect(); return r.right > bounds.right || r.left < bounds.left || label.scrollWidth > label.clientWidth + 1 }),
+      overflow: dialog.scrollWidth > dialog.clientWidth + 1,
+    }
+  })
+  assert.deepEqual(layout, { clipped: false, overflow: false }, 'Long Word labels fit the paragraph dialog')
+  await hwp.screenshot({ path: join(work, 'word-paragraph.png'), animations: 'disabled' })
+  const initialWindow = await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    const size = window.getSize()
+    window.setSize(960, 720)
+    return { id: window.id, size }
+  })
+  await hwp.waitForFunction(() => innerWidth <= 960)
+  assert.equal(await firstPara.evaluate((dialog) => dialog.getBoundingClientRect().right <= innerWidth && dialog.scrollWidth <= dialog.clientWidth + 1), true, 'Word dialog fits a smaller desktop window')
+  const lastParaControl = firstPara.locator('.dialog-tab-panel[data-tab="extended"] select').last()
+  await lastParaControl.scrollIntoViewIfNeeded()
+  assert.equal(await lastParaControl.evaluate((control) => control.getBoundingClientRect().bottom <= control.closest('.dialog-wrap').getBoundingClientRect().bottom), true, 'Lower paragraph controls remain reachable in a smaller window')
+  await hwp.screenshot({ path: join(work, 'word-paragraph-small.png'), animations: 'disabled' })
+  await app.evaluate(({ BrowserWindow }, original) => BrowserWindow.fromId(original.id).setSize(...original.size), initialWindow)
+  await firstPara.getByRole('button', { name: '취소', exact: true }).click()
   // The document check opens on the document and closes again.
   const checkButton = hwp.locator('.hwp-topbar-button')
   await checkButton.click()
@@ -234,11 +270,25 @@ try {
   await detached.getByRole('tab', { name: '일반', exact: true }).click()
   await detached.getByLabel('화면 테마').selectOption('dark')
   assert.equal(await detached.locator('html').getAttribute('data-theme'), 'dark')
-  assert.equal(await detached.getByLabel('인터페이스 용어').inputValue(), 'word')
-  await detached.getByLabel('인터페이스 용어').selectOption('hwp')
+  assert.equal(await detached.getByLabel('인터페이스 스타일').inputValue(), 'word')
+  // Keep a dialog open in the other window while Preferences changes the style.
+  const peer = app.context().pages().find((p) => p.url().includes('://hwp') && p !== reopened)
+  assert.ok(peer, 'A second editor is open for live interface switching')
+  const peerFrame = peer.frameLocator('iframe')
+  await peerFrame.locator('[data-i18n="menu.format"]').click()
+  await peerFrame.locator('.md-item[data-cmd="format:para-shape"]').click()
+  const peerPara = peerFrame.locator('.ps-dialog')
+  await peerPara.locator('.dialog-tab[data-tab="extended"]').click()
+  const checkboxStates = await peerPara.locator('input[type="checkbox"]').evaluateAll((inputs) => inputs.map((input) => input.checked))
+  await detached.getByLabel('인터페이스 스타일').selectOption('hwp')
   for (const editor of app.context().pages().filter((p) => p.url().includes('://hwp'))) {
     await editor.frameLocator('iframe').locator('[data-i18n="menu.page"]').filter({ hasText: /^쪽$/ }).waitFor()
   }
+  await peerPara.getByLabel('외톨이줄 보호(K)', { exact: true }).waitFor()
+  assert.equal(await peerPara.locator('.dialog-tab[data-tab="extended"]').innerText(), '확장')
+  assert.deepEqual(await peerPara.locator('input[type="checkbox"]').evaluateAll((inputs) => inputs.map((input) => input.checked)), checkboxStates, 'Changing interface style preserves paragraph controls')
+  await peer.screenshot({ path: join(work, 'hwp-paragraph.png'), animations: 'disabled' })
+  await peerPara.getByRole('button', { name: '취소', exact: true }).click()
   assert.equal(JSON.parse(readFileSync(join(env.CHOJEMA_DOOROO_USER_DATA, 'chojema-settings.json'), 'utf8')).terminology, 'hwp')
   // Restart the real app with the same isolated profile to verify persistence.
   await app.evaluate(({ app }) => app.exit(0)).catch(() => {})
@@ -248,8 +298,8 @@ try {
   const restarted = await app.firstWindow()
   await restarted.getByRole('tab', { name: /새 문서\.hwpx/ }).waitFor({ timeout: 30_000 })
   await restarted.evaluate(() => window.chojema.command('settings'))
-  assert.equal(await restarted.getByLabel('인터페이스 용어').inputValue(), 'hwp')
-  await restarted.getByLabel('인터페이스 용어').selectOption('word')
+  assert.equal(await restarted.getByLabel('인터페이스 스타일').inputValue(), 'hwp')
+  await restarted.getByLabel('인터페이스 스타일').selectOption('word')
   await restarted.screenshot({ path: join(work, 'terminology-settings.png') })
   // The exported PDF comes back in as a new, untitled HWPX document holding its text.
   await restarted.evaluate((path) => window.chojema.command('open-path', path), exportedPdf)
@@ -278,7 +328,7 @@ try {
   assert.match(importedXml, /Chojema HWP smoke test/, 'The text of a PDF comes in as document text')
   assert.match(await app.evaluate(() => globalThis.__chojemaImportDefault ?? ''), /smoke-pdf\.hwpx$/, 'A brought-in PDF saves as a new document under its own name')
   assert.deepEqual(errors, [], 'No app or optional-bridge handler errors')
-  const result = { passed: true, hwpx, hwpFile, roundtrip, pagePng, pageJpg, importedHwpx, editorProcessesPreserved: true, screenshots: work, errors, platformWarnings }
+  const result = { passed: true, hwpx, hwpFile, roundtrip, pagePng, pageJpg, importedHwpx, editorProcessesPreserved: true, interfaceStylesVerified: true, screenshots: work, errors, platformWarnings }
   writeFileSync(join(work, 'result.json'), JSON.stringify(result, null, 2))
   console.log(JSON.stringify(result, null, 2))
 } catch (error) {
