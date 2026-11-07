@@ -1,5 +1,6 @@
 import './style.css'
 import type { AppState } from '../shared/contracts'
+import { DOCUMENT_ICON, NEW_DOCUMENT_ICON, OPEN_FOLDER_ICON } from './icons'
 
 declare global {
   interface Window {
@@ -32,7 +33,7 @@ async function command(action: string, value?: unknown) {
 function render(state: AppState) {
   current = state
   document.documentElement.dataset.theme = state.theme
-  tabs.innerHTML = state.tabs.map((tab) => `<div class="tab ${tab.active ? 'active' : ''} ${tab.secondary ? 'secondary' : ''}"><button role="tab" aria-selected="${tab.active}" data-action="activate" data-value="${escape(tab.id)}" title="${escape(tab.path ?? tab.title)}"><span class="format ${tab.kind}">H</span>${escape(tab.title)}</button><button class="close" aria-label="${escape(tab.title)} 닫기" data-action="close" data-value="${escape(tab.id)}">×</button></div>`).join('')
+  tabs.innerHTML = state.tabs.map((tab) => `<div class="tab ${tab.active ? 'active' : ''} ${tab.secondary ? 'secondary' : ''}"><button role="tab" aria-selected="${tab.active}" data-action="activate" data-value="${escape(tab.id)}" title="${escape(tab.path ?? tab.title)}"><span class="format" aria-hidden="true">${DOCUMENT_ICON}</span>${escape(tab.title)}</button><button class="close" aria-label="${escape(tab.title)} 닫기" data-action="close" data-value="${escape(tab.id)}">×</button></div>`).join('')
   if (state.page === 'editor') {
     content.innerHTML = ''
     renderedPage = 'editor'
@@ -40,7 +41,7 @@ function render(state: AppState) {
   }
   if (state.page === 'home') {
     renderedPage = 'home'
-    content.innerHTML = `<section class="home"><div class="eyebrow">CHOJEMA DOOROO</div><h1>문서에 집중하는 작업 공간</h1><p class="lead">HWP와 HWPX 문서를 작성하고, 나란히 살펴보세요.</p><div class="cards"><button class="card" data-action="new-hwp"><span class="file-mark hwp">H</span><strong>새 문서</strong><span>빈 문서에서 새로 시작</span><small>기본 저장 형식 HWPX</small></button><button class="card" data-action="open"><span class="file-mark hwp">H</span><strong>파일 열기</strong><span>저장된 문서 불러오기</span><small>HWP, HWPX 파일 지원</small></button></div><div class="recent-heading"><h2>최근 문서</h2></div><div class="recent">${state.recent.length ? state.recent.map((path) => `<button class="recent-file" data-action="open-path" data-value="${escape(path)}"><span>${escape(path.split(/[\\/]/).pop()!)}</span><small>${escape(path)}</small></button>`).join('') : '<div class="empty">최근에 연 문서가 없습니다.<br>HWP, HWPX 파일을 이 창으로 끌어 놓아도 열 수 있습니다.</div>'}</div><footer><span>Chojema Dooroo ${escape(state.version)}</span><button data-action="settings">환경 설정</button></footer></section>`
+    content.innerHTML = `<section class="home"><div class="eyebrow">CHOJEMA DOOROO</div><h1>문서에 집중하는 작업 공간</h1><p class="lead">HWP와 HWPX 문서를 작성하고, 나란히 살펴보세요.</p><div class="cards"><button class="card" data-action="new-hwp"><span class="action-icon" aria-hidden="true">${NEW_DOCUMENT_ICON}</span><strong>새 문서</strong><span>빈 문서에서 새로 시작</span><small>기본 저장 형식 HWPX</small></button><button class="card" data-action="open"><span class="action-icon" aria-hidden="true">${OPEN_FOLDER_ICON}</span><strong>파일 열기</strong><span>저장된 문서 불러오기</span><small>HWP, HWPX 파일 지원</small></button></div><div class="recent-heading"><h2>최근 문서</h2></div><div class="recent">${state.recent.length ? state.recent.map((path) => `<button class="recent-file" data-action="open-path" data-value="${escape(path)}"><span>${escape(path.split(/[\\/]/).pop()!)}</span><small>${escape(path)}</small></button>`).join('') : '<div class="empty">최근에 연 문서가 없습니다.<br>HWP, HWPX 파일을 이 창으로 끌어 놓아도 열 수 있습니다.</div>'}</div><footer><span>Chojema Dooroo ${escape(state.version)}</span><button data-action="settings">환경 설정</button></footer></section>`
   } else if (renderedPage !== 'settings') {
     renderedPage = 'settings'
     const hasDocument = state.tabs.length > 0
