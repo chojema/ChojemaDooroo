@@ -1,3 +1,4 @@
+import { documentImportFormat } from '../../../hwp/src/shared/document-formats'
 export type EditorKind = 'hwp'
 export interface TabInfo {
   id: string
@@ -27,9 +28,9 @@ export function editorForPath(path: string): EditorKind | undefined {
 export function isPdfPath(path: string): boolean {
   return /\.pdf$/i.test(path)
 }
-/** What the app opens: an HWP document, or a PDF to bring in. */
+/** Native documents open directly; interchange formats become new HWPX documents. */
 export function isOpenablePath(path: string): boolean {
-  return Boolean(editorForPath(path)) || isPdfPath(path)
+  return Boolean(editorForPath(path)) || isPdfPath(path) || documentImportFormat(path) !== null
 }
 export function paneBounds(width: number, height: number, split: boolean) {
   const top = 36

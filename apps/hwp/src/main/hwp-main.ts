@@ -23,6 +23,8 @@ import { getUiLang } from '@genoffice/i18n'
 import { registerHwpAttachmentIpc } from './attachments-ipc'
 import { registerHwpImageIpc } from './ai-image'
 import { atomicWriteFile } from './atomic-write'
+import { exportDocument } from './document-convert'
+import { DOCUMENT_EXPORT_FORMATS, type DocumentExportFormat } from '../shared/document-formats'
 import {
   badJob,
   pagePicturePaths,
@@ -111,7 +113,7 @@ const savePathByWc = new Map<number, string>()
  * read from its temp file like any open, but the view has no save target, so
  * the first save asks where; the copy's name and format are what it offers.
  */
-const untitledCopyByWc = new Map<number, { name: string; format: HwpFormat }>()
+const untitledCopyByWc = new Map<number, { name: string; format: HwpFormat; notice?: string }>()
 /** Unsaved-changes flags mirrored from the renderer; drives the save prompt before closing a tab/window */
 const dirtyByWc = new Set<number>()
 /**
@@ -125,7 +127,7 @@ const closeSaveWaiters = new Map<number, (ok: boolean) => void>()
 /** Resolvers for menu- and shortcut-triggered saves, settled when the renderer's save ends */
 const saveWaiters = new Map<number, (ok: boolean) => void>()
 const readBytesWaiters = new Map<number, (result: unknown) => void>()
-const readTextInFlight = new Map<number, Promise<string>>()
+const readBytesInFlight = new Map<number, Promise<Uint8Array>>()
 /** Target a view resolved with beginSave and has not committed yet */
 interface AutomationSave {
   path: string
@@ -331,8 +333,8 @@ const imageWindow = (): BrowserWindow =>
 
 /** The name an export is offered under: the document's, or the untitled one. */
 function exportName(wcId: number, extension: string): string {
-  const current = savePathByWc.get(wcId)
-  const base = current ? basename(current).replace(/.hwpx?$/i, '') : ''
+  const current = savePathByWc.get(wcId) ?? untitledCopyByWc.get(wcId)?.name
+  const base = current ? basename(current).replace(/\.hwpx?$/i, '') : ''
   return `${base || tm('untitledFile')}.${extension}`
 }
 
@@ -391,11 +393,15 @@ const READ_TEXT_RETRY_MS = 250
  * registered while it mounts and a request sent before that is dropped.
  */
 export function hwpReadText(contents: WebContents): Promise<string> {
+  return hwpReadBytes(contents).then(hwpToText)
+}
+
+function hwpReadBytes(contents: WebContents): Promise<Uint8Array> {
   if (contents.isDestroyed()) return Promise.reject(new Error('the document is no longer open'))
   const wcId = contents.id
-  const inFlight = readTextInFlight.get(wcId)
+  const inFlight = readBytesInFlight.get(wcId)
   if (inFlight) return inFlight
-  const request = new Promise<string>((resolve, reject) => {
+  const request = new Promise<Uint8Array>((resolve, reject) => {
     let settled = false
     const settle = (finish: () => void): void => {
       if (settled) return
@@ -403,7 +409,7 @@ export function hwpReadText(contents: WebContents): Promise<string> {
       clearInterval(retry)
       clearTimeout(timer)
       readBytesWaiters.delete(wcId)
-      readTextInFlight.delete(wcId)
+      readBytesInFlight.delete(wcId)
       finish()
     }
     const retry = setInterval(() => {
@@ -423,21 +429,44 @@ export function hwpReadText(contents: WebContents): Promise<string> {
       if (answered) return
       answered = true
       const raw = (result ?? {}) as { ok?: unknown; bytes?: unknown; error?: unknown }
-      if (raw.ok !== true || !(raw.bytes instanceof Uint8Array)) {
+      if (raw.ok !== true || !(raw.bytes instanceof Uint8Array) || !raw.bytes.length || raw.bytes.length > MAX_HWP_SAVE_BYTES) {
         const error = typeof raw.error === 'string' ? raw.error : 'the editor returned no document'
         settle(() => reject(new Error(error)))
         return
       }
-      hwpToText(raw.bytes).then(
-        (text) => settle(() => resolve(text)),
-        (error: unknown) =>
-          settle(() => reject(error instanceof Error ? error : new Error(String(error)))),
-      )
+      settle(() => resolve(raw.bytes as Uint8Array))
     })
     contents.send(HWP_CHANNELS.readBytesRequest)
   })
-  readTextInFlight.set(wcId, request)
+  readBytesInFlight.set(wcId, request)
   return request
+}
+
+const documentExports = new Set<number>()
+async function exportDocumentCopy(contents: WebContents, format: DocumentExportFormat): Promise<void> {
+  if (!hwpViews.has(contents.id) || documentExports.has(contents.id)) return
+  const parent = BrowserWindow.fromWebContents(contents) ?? BrowserWindow.getFocusedWindow()
+  if (memoModalByWc.size) { contents.send(HWP_CHANNELS.memoBlocked); return }
+  documentExports.add(contents.id)
+  try {
+    const picked = await showSaveDialogWithMemory(dialog, parent, {
+      title: `${format === 'docx' ? 'Word' : format.toUpperCase()}로 내보내기`,
+      defaultPath: exportName(contents.id, format),
+      filters: [{ name: format === 'docx' ? 'Word 문서' : format.toUpperCase(), extensions: [format] }],
+    }, configuredDefaultSaveDir(app))
+    if (picked.canceled || !picked.filePath) return
+    const target = picked.filePath.toLowerCase().endsWith('.' + format) ? picked.filePath : picked.filePath + '.' + format
+    if (target !== picked.filePath && existsSync(target)) throw new Error('확장자를 붙인 이름의 파일이 이미 있습니다. 파일 이름에 확장자를 포함하여 다시 선택해 주세요.')
+    const bytes = await exportDocument(await hwpReadBytes(contents), format)
+    await atomicWriteFile(target, bytes)
+    const options = { type: 'info' as const, message: '문서를 내보냈습니다.', detail: `${target}\n일부 서식·배치와 도형·메모는 원본과 다를 수 있습니다.` }
+    if (parent && !parent.isDestroyed()) await dialog.showMessageBox(parent, options)
+    else await dialog.showMessageBox(options)
+  } catch (error) {
+    const options = { type: 'error' as const, message: '문서를 내보내지 못했습니다.', detail: error instanceof Error ? error.message : String(error) }
+    if (parent && !parent.isDestroyed()) await dialog.showMessageBox(parent, options)
+    else await dialog.showMessageBox(options)
+  } finally { documentExports.delete(contents.id) }
 }
 
 function settleSave(wcId: number, ok: boolean): void {
@@ -867,6 +896,7 @@ function registerHwpIpc(): void {
     else if (command === 'pdf' || IMAGE_FORMATS.includes(command as ImageFormat)) {
       requestHwpPrint(e.sender, command as PrintMode)
     }
+    else if ((DOCUMENT_EXPORT_FORMATS as readonly unknown[]).includes(command)) void exportDocumentCopy(e.sender, command as DocumentExportFormat)
     else if ((APP_COMMANDS as readonly unknown[]).includes(command)) runtime.appCommand?.(e.sender, command as AppCommand)
   })
 
@@ -1041,6 +1071,7 @@ function grantAndTrack(
       untitledCopyByWc.set(wcId, {
         name: basename(openPath),
         format: hwpFormatOfPath(openPath) ?? 'hwp',
+        ...(options.importNotice ? { notice: options.importNotice } : {}),
       })
     } else {
       savePathByWc.set(wcId, openPath)
@@ -1088,6 +1119,7 @@ export interface HwpViewOptions {
    * template's, spec 5.7): it is read like a file, saved like a new document.
    */
   untitledCopy?: boolean | undefined
+  importNotice?: string
 }
 
 export function createHwpView(

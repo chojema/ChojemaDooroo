@@ -1,3 +1,4 @@
+import { DOCUMENT_EXPORT_FORMATS } from '../shared/document-formats'
 import { installTerminology } from './terminology'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createEditor } from '@rhwp/editor'
@@ -285,6 +286,7 @@ export default function App() {
         })
         if (disposed) return
         setPhase('ready')
+        if (copy?.notice) setNotice({ tone: 'info', text: copy.notice, sticky: true })
         if (await window.hwpApi.trackingDropped().catch(() => false)) {
           if (!disposed) setNotice({ tone: 'info', key: 'openedTracked', sticky: true })
         }
@@ -514,6 +516,9 @@ export default function App() {
       .installFileMenu({
         save: t('fileSave'),
         saveAs: t('fileSaveAs'),
+        md: t('fileExportMd'),
+        docx: t('fileExportDocx'),
+        html: t('fileExportHtml'),
         pdf: t('fileExportPdf'),
         png: t('fileExportPng'),
         jpg: t('fileExportJpg'),
@@ -531,6 +536,7 @@ export default function App() {
       if (
         command === 'save' ||
         command === 'saveAs' ||
+        (DOCUMENT_EXPORT_FORMATS as readonly unknown[]).includes(command) ||
         command === 'pdf' ||
         command === 'preview' ||
         command === 'print' ||

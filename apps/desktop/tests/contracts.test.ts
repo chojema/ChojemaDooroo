@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { editorForPath, paneBounds } from '../src/shared/contracts'
+import { editorForPath, paneBounds, isOpenablePath } from '../src/shared/contracts'
 
 describe('document routing', () => {
-  it('routes only HWP and HWPX documents', () => {
+  it('routes HWP and HWPX directly; interchange documents go through import', () => {
     expect(editorForPath('문서.hwpx')).toBe('hwp')
     expect(editorForPath('문서.HWP')).toBe('hwp')
+    for (const file of ['draft.docx', 'legacy.doc', '한글.MD', 'note.markdown', 'page.HTML', 'page.htm', 'file.pdf']) expect(isOpenablePath(file)).toBe(true)
+    for (const file of ['bad.hwpx.exe', 'bad.md.exe', 'sheet.xlsx']) expect(isOpenablePath(file)).toBe(false)
     for (const file of ['draft.docx', 'legacy.doc', 'sheet.xlsx', 'slides.pptx', 'book.odt', 'file.pdf', 'bad.hwpx.exe']) expect(editorForPath(file)).toBeUndefined()
   })
 })

@@ -1,3 +1,4 @@
+import type { DocumentExportFormat } from './document-formats'
 import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 import type { AiToolCapabilities, MediaToolErrorCode } from '@genoffice/ai-search'
 import type { Lang } from '@genoffice/i18n'
@@ -161,7 +162,7 @@ export interface AppMenuItem {
 }
 
 /** What the editor's menus ask for (see the plugin's FILE_COMMAND_EVENT). */
-export type FileCommand = SaveMode | PrintMode | 'preview' | AppCommand
+export type FileCommand = SaveMode | PrintMode | DocumentExportFormat | 'preview' | AppCommand
 
 /**
  * Where the pages go: a PDF file, the printer through the system print dialog, or one
@@ -405,7 +406,7 @@ export interface HwpApi {
   /** path queued for this view when its tab was created; null for a view opened without a file */
   consumePending(): Promise<string | null>
   /** the pending path is an untitled copy (a skill template's): its name and format; null otherwise */
-  untitledCopy?(): Promise<{ name: string; format: 'hwp' | 'hwpx' } | null>
+  untitledCopy?(): Promise<{ name: string; format: 'hwp' | 'hwpx'; notice?: string } | null>
   readFile(path: string): Promise<Uint8Array>
   /**
    * the file `readFile` gave this view had tracked changes and was given without them: the

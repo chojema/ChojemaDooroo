@@ -19,6 +19,8 @@ import {
   requestHwpSave, requestHwpPrint, setHwpFileSavedHook,
 } from '../../../hwp/src/main/hwp-main'
 import { importPdfAsHwpx, PdfImportError } from '../../../hwp/src/main/pdf-import'
+import { importDocumentAsHwpx } from '../../../hwp/src/main/document-convert'
+import { documentImportFormat } from '../../../hwp/src/shared/document-formats'
 import {
   registerRendererScheme, installRendererProtocol, installNavigationGuard,
   installContextMenu, contextMenuLabels, DROP_OPEN_CHANNEL,
@@ -199,7 +201,7 @@ function saved(wcId: number, path: string) {
   if (host) layout(host)
 }
 /** `copy`: a file to open as a new, untitled document (a PDF brought in) instead of `path`. */
-function openTab(host: Host, kind: EditorKind, path?: string, copy?: string) {
+function openTab(host: Host, kind: EditorKind, path?: string, copy?: string, importNotice?: string) {
   if (path) {
     const existing = allTabs().find((t) => t.path && resolve(t.path).toLowerCase() === resolve(path).toLowerCase())
     if (existing) {
@@ -208,7 +210,7 @@ function openTab(host: Host, kind: EditorKind, path?: string, copy?: string) {
       return existing
     }
   }
-  const view = copy ? createHwpView(copy, { untitledCopy: true }) : createHwpView(path)
+  const view = copy ? createHwpView(copy, { untitledCopy: true, importNotice }) : createHwpView(path)
   const tab: Tab = { id: `doc-${nextId++}`, kind, title: path ? basename(path) : copy ? basename(copy) : '새 문서.hwpx', path, view }
   host.tabs.push(tab)
   host.win.contentView.addChildView(view)
@@ -231,8 +233,9 @@ function hostForTab(tab: Tab) { return [...hosts].find((h) => h.tabs.includes(ta
 async function openPath(host: Host, path: unknown) {
   if (typeof path !== 'string' || !isAbsolute(path) || !existsSync(path)) throw new Error('문서 파일을 찾을 수 없습니다.')
   if (isPdfPath(path)) return importPdf(host, resolve(path))
+  if (documentImportFormat(path)) return importDocument(host, resolve(path))
   const kind = editorForPath(path)
-  if (!kind) throw new Error('HWP, HWPX 또는 PDF 파일을 선택해 주세요.')
+  if (!kind) throw new Error('HWP, HWPX, PDF, MD, Word 또는 HTML 파일을 선택해 주세요.')
   openTab(host, kind, resolve(path))
 }
 const PDF_IMPORT_MESSAGES: Record<PdfImportError['reason'], string> = {
@@ -258,8 +261,22 @@ async function importPdf(host: Host, path: string) {
   const tab = openTab(host, 'hwp', undefined, made)
   tab.view.webContents.once('destroyed', () => { void rm(dirname(made), { recursive: true, force: true }) })
 }
+async function importDocument(host: Host, path: string) {
+  let made: string
+  try {
+    made = await importDocumentAsHwpx(path)
+  } catch (error) {
+    await dialog.showMessageBox(host.win, { type: 'error', message: '문서를 가져오지 못했습니다.', detail: error instanceof Error ? error.message : String(error) })
+    return
+  }
+  const notice = documentImportFormat(path) === 'doc'
+    ? '구형 Word(.doc)의 본문 텍스트를 새 HWPX 문서로 가져왔습니다. 그림·표·서식은 포함하지 않습니다.'
+    : '새 HWPX 문서로 가져왔습니다. 원본은 유지됩니다. 일부 서식·배치와 도형·메모는 달라질 수 있으며 외부 링크의 그림은 가져오지 않습니다.'
+  const tab = openTab(host, 'hwp', undefined, made, notice)
+  tab.view.webContents.once('destroyed', () => { void rm(dirname(made), { recursive: true, force: true }) })
+}
 async function openDialog(host: Host) {
-  const result = await dialog.showOpenDialog(host.win, { properties: ['openFile', 'multiSelections'], filters: [{ name: '한글 문서 및 PDF', extensions: ['hwp', 'hwpx', 'pdf'] }, { name: '한글 문서', extensions: ['hwp', 'hwpx'] }, { name: 'PDF (텍스트를 새 문서로 가져오기)', extensions: ['pdf'] }] })
+  const result = await dialog.showOpenDialog(host.win, { properties: ['openFile', 'multiSelections'], filters: [{ name: '지원하는 문서', extensions: ['hwp', 'hwpx', 'pdf', 'md', 'markdown', 'docx', 'doc', 'html', 'htm'] }, { name: '한글 문서', extensions: ['hwp', 'hwpx'] }, { name: 'Markdown', extensions: ['md', 'markdown'] }, { name: 'Word', extensions: ['docx', 'doc'] }, { name: 'HTML', extensions: ['html', 'htm'] }, { name: 'PDF (텍스트를 새 문서로 가져오기)', extensions: ['pdf'] }] })
   for (const path of result.filePaths) await openPath(host, path)
 }
 async function mayClose(tab: Tab, host: Host) {

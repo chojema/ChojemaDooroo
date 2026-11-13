@@ -12,6 +12,9 @@ import {
 const LABELS = {
   save: '저장',
   saveAs: '다른 이름으로 저장…',
+  md: 'Markdown으로 내보내기…',
+  docx: 'Word(.docx)로 내보내기…',
+  html: 'HTML로 내보내기…',
   pdf: 'PDF로 내보내기…',
   png: 'PNG 그림으로 내보내기…',
   jpg: 'JPG 그림으로 내보내기…',
@@ -71,6 +74,9 @@ describe('the File menu of the embedded editor', () => {
     expect(menu).toEqual([
       'ext:ieum-save',
       'ext:ieum-save-as',
+      'ext:ieum-export-md',
+      'ext:ieum-export-docx',
+      'ext:ieum-export-html',
       'ext:ieum-export-pdf',
       'ext:ieum-export-png',
       'ext:ieum-export-jpg',
@@ -90,6 +96,9 @@ describe('the File menu of the embedded editor', () => {
     for (const id of [
       'ext:ieum-save',
       'ext:ieum-save-as',
+      'ext:ieum-export-md',
+      'ext:ieum-export-docx',
+      'ext:ieum-export-html',
       'ext:ieum-export-pdf',
       'ext:ieum-export-png',
       'ext:ieum-export-jpg',
@@ -98,14 +107,14 @@ describe('the File menu of the embedded editor', () => {
     ]) {
       commands.get(id)?.execute(undefined as never)
     }
-    expect(fired).toEqual(['save', 'saveAs', 'pdf', 'png', 'jpg', 'preview', 'print'])
+    expect(fired).toEqual(['save', 'saveAs', 'md', 'docx', 'html', 'pdf', 'png', 'jpg', 'preview', 'print'])
   })
 
   it('puts the items back once when asked again, without registering twice', () => {
     const { plugin, menu } = editor()
     plugin.installFileMenu(LABELS)
     expect(plugin.installFileMenu(LABELS)).toEqual({ ok: true })
-    expect(menu.filter((id) => id.startsWith('ext:'))).toHaveLength(7)
+    expect(menu.filter((id) => id.startsWith('ext:'))).toHaveLength(10)
   })
 
   it('says so when the editor has no File menu, and refuses missing labels', () => {
